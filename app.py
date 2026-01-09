@@ -4,7 +4,7 @@ import pandas as pd
 # ==========================================================
 # 1. CONFIGURATION & DATA CONSTANTS
 # ==========================================================
-st.set_page_config(page_title="Pro MTB Spring Rate Calculator", page_icon="⚙️", layout="centered")
+st.set_page_config(page_title="MTB Spring Rate Calculator", page_icon="⚙️", layout="centered")
 
 # --- Constants ---
 LB_TO_KG = 0.453592
@@ -130,37 +130,29 @@ def analyze_spring_compatibility(progression_pct, has_hbo):
 
 # --- CALLBACKS ---
 def update_category_from_bike():
-    """Updates session state category based on selected bike travel"""
     selected_model = st.session_state.bike_selector
     bike_db = load_bike_database()
     
     if selected_model:
-        # Find bike
         bike_row = bike_db[bike_db['Model'] == selected_model].iloc[0]
         t = bike_row['Travel_mm']
         
-        # Logic for Category Auto-Select
         cat_keys = list(CATEGORY_DATA.keys())
         new_idx = 3 # Default Enduro
-        
-        if t < 125: new_idx = 0 # Downcountry
-        elif t < 140: new_idx = 1 # Trail
-        elif t < 155: new_idx = 2 # All Mtn
-        elif t < 170: new_idx = 3 # Enduro
-        elif t < 185: new_idx = 4 # Long Travel
+        if t < 125: new_idx = 0
+        elif t < 140: new_idx = 1
+        elif t < 155: new_idx = 2
+        elif t < 170: new_idx = 3
+        elif t < 185: new_idx = 4
         else: new_idx = 6 # DH
         
-        # Update Session State for the Category Widget
         st.session_state.category_select = cat_keys[new_idx]
-        
-        # Also reset bias slider to the new category default
-        new_cat_key = cat_keys[new_idx]
-        st.session_state.rear_bias_slider = CATEGORY_DATA[new_cat_key]["bias"]
+        st.session_state.rear_bias_slider = CATEGORY_DATA[cat_keys[new_idx]]["bias"]
 
 # ==========================================================
 # 3. UI MAIN
 # ==========================================================
-st.title("Pro MTB Spring Rate Calculator")
+st.title("MTB Spring Rate Calculator")
 
 # Load Database
 bike_db = load_bike_database()
@@ -211,14 +203,13 @@ is_db_bike = False
 
 if not bike_db.empty:
     bike_models = list(bike_db['Model'].unique())
-    # FIX 1: index=None makes it start empty (no manual delete needed)
     selected_model = st.selectbox(
         "🚲 Select Bike Model (Auto-Fill)", 
         bike_models, 
         index=None, 
         placeholder="Type to search...",
         key='bike_selector',
-        on_change=update_category_from_bike # FIX 2: Trigger category update
+        on_change=update_category_from_bike
     )
     
     if selected_model:
@@ -229,10 +220,7 @@ else:
     st.warning("Database file not found. Using Manual Mode.")
 
 cat_options = list(CATEGORY_DATA.keys())
-cat_labels = [f"{k} ({CATEGORY_DATA[k]['desc']})" for k in cat_options]
 
-# Category Select
-# Note: Key 'category_select' is updated by the callback above
 category = st.selectbox(
     "Category (Determines Weight Bias)",
     cat_options,
@@ -265,12 +253,11 @@ with col_c1:
         w_in = st.number_input(lbl, min_w, max_w, float(def_w_val), 0.1, key="bike_weight_man")
         bike_kg = w_in * LB_TO_KG if is_lbs else w_in
 
-# --- Rear Bias (RESTORED FEATURES) ---
+# --- Rear Bias ---
 with col_c2:
     cat_def_bias = int(defaults["bias"])
     skill_suggestion = SKILL_MODIFIERS[skill]["bias"]
     
-    # FIX 3: Restore Reset Button Layout
     cl1, cl2 = st.columns([0.7, 0.3])
     with cl1:
         st.markdown("### Rear Bias")
@@ -285,7 +272,6 @@ with col_c2:
     rear_bias_in = st.slider("Base Bias (%)", 55, 85, key="rear_bias_slider", label_visibility="collapsed")
     final_bias_calc = rear_bias_in
 
-    # FIX 4: Restore Info Text
     st.caption(f"Category Default: **{cat_def_bias}%** (Dynamic/Attack)")
     
     if skill_suggestion != 0:
@@ -318,7 +304,6 @@ with col_c1:
 st.header("3. Shock & Kinematics")
 col_k1, col_k2 = st.columns(2)
 
-# Determine defaults
 if is_db_bike:
     raw_travel = float(selected_bike_data['Travel_mm'])
     raw_stroke = float(selected_bike_data['Shock_Stroke'])
@@ -332,7 +317,6 @@ else:
     raw_lr_start = float(defaults["lr_start"])
     raw_lr_end = raw_lr_start * (1 - (raw_prog/100))
 
-# Unit Conversion
 def_travel = raw_travel if unit_len == "Millimetres (mm)" else raw_travel * MM_TO_IN
 def_stroke = raw_stroke if unit_len == "Millimetres (mm)" else raw_stroke * MM_TO_IN
 
@@ -355,7 +339,6 @@ with col_k2:
     if adv_kinematics:
         use_advanced_calc = True
         lr_start = st.number_input("LR Start Rate", 1.5, 4.0, raw_lr_start, 0.05)
-        
         k_input_mode = st.radio("Input Mode", ["Start & End Rates", "Start & Progression %"], horizontal=True, index=0)
         
         if k_input_mode == "Start & Progression %":
@@ -372,7 +355,6 @@ with col_k2:
 
         calc_lr_start = lr_start
         calc_lr_end = lr_end
-        
     else:
         prog_pct = float(defaults["progression"])
         if stroke_mm > 0:
@@ -383,7 +365,6 @@ with col_k2:
     
     has_hbo = st.checkbox("Shock has HBO (Hydraulic Bottom Out)?")
 
-# Analysis
 analysis = analyze_spring_compatibility(prog_pct, has_hbo)
 st.subheader("Springs You Can Use")
 for spring_type, info in analysis.items():
@@ -436,6 +417,7 @@ if raw_rate > 0:
 
     if active_spring_type == "Sprindex":
         st.subheader("Sprindex Recommendation")
+        
         family = None
         if stroke_mm <= 55: family = "XC/Trail (55mm)"
         elif stroke_mm <= 65: family = "Enduro (65mm)"
@@ -443,21 +425,59 @@ if raw_rate > 0:
         
         if family:
             st.markdown(f"**Compatible Family:** {family}")
+            
             ranges = SPRINDEX_DATA[family]["ranges"]
-            found = False
-            for r_str in ranges:
+            found_match = False
+            gap_neighbors = []
+            
+            for i, r_str in enumerate(ranges):
                 low, high = map(int, r_str.split("-"))
                 if low <= raw_rate <= high:
                     st.success(f"✅ **Perfect Fit:** {r_str} lbs/in")
-                    final_rate_for_tuning = int(round(raw_rate / 5) * 5)
-                    found = True
+                    spr_rounded = int(round(raw_rate / 5) * 5)
+                    st.caption(f"Your ideal rate ({int(raw_rate)}) falls within this adjustable range.")
+                    final_rate_for_tuning = spr_rounded
+                    found_match = True
                     break
-            if not found:
-                st.warning("Calculated rate is outside standard Sprindex ranges.")
-                final_rate_for_tuning = int(raw_rate)
+                
+                if i > 0:
+                    prev_low, prev_high = map(int, ranges[i-1].split("-"))
+                    if prev_high < raw_rate < low:
+                        gap_neighbors = [(ranges[i-1], prev_high), (r_str, low)]
+            
+            if not found_match and gap_neighbors:
+                lower_range_str, lower_limit_val = gap_neighbors[0]
+                upper_range_str, upper_limit_val = gap_neighbors[1]
+                
+                st.warning(f"⚠️ Your rate ({int(raw_rate)} lbs) falls in a gap between Sprindex ranges.")
+                
+                gap_choice = st.radio(
+                    "Choose your preferred option to see Tuning details:",
+                    [f"Option A: {lower_range_str} (Maxed at {lower_limit_val} lbs)", 
+                     f"Option B: {upper_range_str} (Min setting at {upper_limit_val} lbs)"]
+                )
+                
+                if "Option A" in gap_choice:
+                    final_rate_for_tuning = lower_limit_val
+                    chosen_sag = (rear_load_lbs * effective_lr) / (lower_limit_val * MM_TO_IN) / stroke_mm * 100
+                    st.info(f"**Selected Option A:** {lower_range_str}")
+                    st.markdown(f"Resulting Sag: **{chosen_sag:.1f}%**")
+                    st.caption("Feel: Plusher, more grip.")
+                    
+                else:
+                    final_rate_for_tuning = upper_limit_val
+                    chosen_sag = (rear_load_lbs * effective_lr) / (upper_limit_val * MM_TO_IN) / stroke_mm * 100
+                    st.info(f"**Selected Option B:** {upper_range_str}")
+                    st.markdown(f"Resulting Sag: **{chosen_sag:.1f}%**")
+                    st.caption("Feel: More support, race feel.")
+
+            elif not found_match:
+                 st.error("Calculated rate is outside standard Sprindex ranges.")
+                 final_rate_for_tuning = int(raw_rate)
         else:
-            st.error("Stroke exceeds Sprindex maximums.")
+            st.error(f"Shock stroke ({stroke_mm}mm) exceeds Sprindex maximums.")
             final_rate_for_tuning = int(raw_rate)
+
     else:
         st.subheader("Available Spring Options")
         options = []
@@ -485,3 +505,10 @@ if raw_rate > 0:
     st.dataframe(pd.DataFrame(preload_data), hide_index=True)
 else:
     st.error("Ensure Stroke and Travel are > 0.")
+
+st.info("""
+**Disclaimers:**
+* **Rate Tolerance:** Standard coils vary +/- 5%.
+* **Stroke Compatibility:** Ensure spring stroke > shock stroke to avoid coil bind.
+* **Diameter:** Check spring ID compatibility with your specific shock body.
+""")
