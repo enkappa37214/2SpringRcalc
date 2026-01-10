@@ -14,7 +14,7 @@ MM_TO_IN = 1/25.4
 STONE_TO_KG = 6.35029
 PROGRESSIVE_CORRECTION_FACTOR = 0.97
 
-# --- Data Tables (Refined v12.12) ---
+# --- Data Tables (v12.12 Refined) ---
 CATEGORY_DATA = {
     "Downcountry": {
         "travel": 115, "stroke": 45.0, "base_sag": 28,
@@ -269,7 +269,8 @@ with col_c2:
         
     rear_bias_in = st.slider("Base Bias (%)", 55, 75, key="rear_bias_slider", label_visibility="collapsed")
     final_bias_calc = rear_bias_in
-    st.caption(f"Category Default: **{cat_def_bias}%**")
+    # CHANGED: Added back "(Dynamic/Attack)" context text
+    st.caption(f"Category Default: **{cat_def_bias}%** (Dynamic/Attack)")
     if skill_suggestion != 0:
         advice_sign = "+" if skill_suggestion > 0 else ""
         st.info(f"💡 Skill Modifier: **{advice_sign}{skill_suggestion}%** bias recommended.")
@@ -355,7 +356,6 @@ with col_k2:
         calc_lr_start = lr_start
         calc_lr_end = lr_end
     else:
-        # Added Tooltip Warning per Audit
         st.info("ℹ️ **Standard Mode:** Assumes linear leverage. Use Advanced Mode for high-pivot or progressive frames.")
         prog_pct = float(defaults["progression"])
         if stroke_mm > 0:
@@ -410,13 +410,13 @@ st.header("Results")
 
 if raw_rate > 0:
     res_c1, res_c2 = st.columns(2)
-    res_c1.metric("Ideal Spring Rate", f"{int(raw_rate)} lbs/in")
+    # CHANGED: Label text
+    res_c1.metric("Calculated spring rate", f"{int(raw_rate)} lbs/in")
     res_c2.metric("Target Sag", f"{target_sag:.1f}% ({sag_mm:.1f} mm)")
 
     final_rate_for_tuning = int(round(raw_rate / 25) * 25)
 
     if not is_db_bike:
-        # Confidence Range
         var_lbs = raw_rate * 0.08 
         st.info(f"ℹ️ **Generic Estimate:** Recommended range is **{int(raw_rate - var_lbs)} – {int(raw_rate + var_lbs)} lbs** due to kinematic variance.")
 
@@ -428,7 +428,8 @@ if raw_rate > 0:
         elif stroke_mm <= 75: family = "DH (75mm)"
         
         if family:
-            st.markdown(f"**Compatible Family:** {family}")
+            # CHANGED: Label text to describe coil model
+            st.markdown(f"**Recommended Coil Model:** {family}")
             ranges = SPRINDEX_DATA[family]["ranges"]
             found_match = False
             gap_neighbors = []
@@ -469,6 +470,10 @@ if raw_rate > 0:
             final_rate_for_tuning = int(raw_rate)
     else:
         st.subheader("Available Spring Options")
+        
+        # CHANGED: Added minimum spring stroke info
+        st.markdown(f"**Minimum Spring Stroke:** > {stroke_mm:.0f} mm")
+        
         options = []
         base_step = 25
         center_rate = int(round(raw_rate / base_step) * base_step)
