@@ -24,8 +24,9 @@ IN_TO_MM, MM_TO_IN = 25.4, 1/25.4
 STONE_TO_KG = 6.35029
 PROGRESSIVE_CORRECTION_FACTOR = 0.97
 EBIKE_WEIGHT_PENALTY_KG = 8.5
-COMMON_STROKES = [37.5, 40.0, 42.5, 45.0, 50.0, 52.5, 55.0, 57.5, 60.0, 62.5, 65.0, 70.0, 75.0]
+COMMON_STROKES = [45, 50, 55, 57.5, 60, 62.5, 65, 70, 75]
 
+# --- Category & Kinematics Data (same as original) ---
 CATEGORY_DATA = {
     "Downcountry": {"travel": 115, "stroke": 45.0, "base_sag": 28, "progression": 15, "lr_start": 2.82, "desc": "110–120 mm", "bike_mass_def_kg": 12.0, "bias": 60},
     "Trail": {"travel": 130, "stroke": 50.0, "base_sag": 30, "progression": 19, "lr_start": 2.90, "desc": "120–140 mm", "bike_mass_def_kg": 13.5, "bias": 63},
@@ -102,6 +103,10 @@ def update_category_from_bike():
         else: cat_name = cat_keys[6]
         st.session_state.category_select = cat_name
         st.session_state.rear_bias_slider = CATEGORY_DATA[cat_name]["bias"]
+        # Lock stroke for DB bike
+        st.session_state.lock_stroke = True
+    else:
+        st.session_state.lock_stroke = False
 
 # ==========================================================
 # 3. UI MAIN
@@ -112,7 +117,7 @@ with col_title:
 with col_reset:
     st.button("Reset", on_click=reset_form, type="secondary", use_container_width=True)
 
-st.caption("Capability Notice: This tool was built for personal use.")
+st.caption("Capability Notice: This tool was built for personal use. Physical verification required.")
 
 bike_db = load_bike_database()
 
@@ -138,7 +143,8 @@ with col_r2:
     else:
         rider_kg = st.number_input("Rider Weight (kg)", 40.0, 130.0, 68.0, 0.5)
     
-    gear_input = st.number_input(f"Gear Weight ({u_mass_label})", 0.0, 25.0, 5.0 if unit_mass == "North America (lbs)" else 4.0, 0.5)
+    gear_def = 5.0 if unit_mass == "North America (lbs)" else 4.0
+    gear_input = st.number_input(f"Gear Weight ({u_mass_label})", 0.0, 25.0, float(gear_def), 0.5)
     gear_kg = gear_input * LB_TO_KG if unit_mass == "North America (lbs)" else gear_input
 
 # --- CHASSIS DATA ---
@@ -148,191 +154,36 @@ is_ebike = (chassis_type == "E-Bike")
 
 selected_bike_data, is_db_bike, bike_model_log = None, False, ""
 col_search, col_toggle = st.columns([0.7, 0.3])
-with col_toggle: manual_entry_mode = st.checkbox("Bike not listed?")
+with col_toggle: manual_entry_mode = st.checkbox("Bike not listed?", help="Select to manually add a model to the database.")
 
 with col_search:
     if not manual_entry_mode:
         if not bike_db.empty:
-            selected_model = st.selectbox("Select Bike Model", list(bike_db['Model'].unique()), index=None, placeholder="Type to search...", key='bike_selector', on_change=update_category_from_bike)
+            selected_model = st.selectbox("Select Bike Model", list(bike_db['Model'].unique()), index=None, key='bike_selector', on_change=update_category_from_bike)
             if selected_model:
                 selected_bike_data, is_db_bike, bike_model_log = bike_db[bike_db['Model'] == selected_model].iloc[0], True, selected_model
                 st.success(f"Verified Model Loaded: {selected_model}")
         else: manual_entry_mode = True
 
 if manual_entry_mode:
+    st.info("Community Contribution: Enter details below to enrich database.")
     col_new1, col_new2, col_new3 = st.columns(3)
     with col_new1: new_year = st.number_input("Year", 2010, 2026, 2025)
     with col_new2: new_brand = st.text_input("Brand", placeholder="e.g. SANTA CRUZ")
     with col_new3: new_name = st.text_input("Model", placeholder="e.g. NOMAD")
     bike_model_log = f"{new_year} {new_brand.upper()} {new_name.upper()}".strip()
+    if not bike_db.empty and bike_model_log in bike_db['Model'].values:
+        st.warning(f"Duplicate Detected: '{bike_model_log}' already exists.")
 
 category = st.selectbox("Category", list(CATEGORY_DATA.keys()), format_func=lambda x: f"{x} ({CATEGORY_DATA[x]['desc']})", key='category_select', on_change=update_bias_from_category)
 defaults = CATEGORY_DATA[category]
 
-col_c1, col_c2 = st.columns(2)
-with col_c1:
-    weight_mode = st.radio("Bike Weight Mode", ["Manual Input", "Estimate"], horizontal=True)
-    if weight_mode == "Estimate":
-        mat, level, size = st.selectbox("Frame Material", ["Carbon", "Aluminium"]), st.selectbox("Build Level", ["Entry-Level", "Mid-Level", "High-End"]), st.selectbox("Size", list(SIZE_WEIGHT_MODS.keys()), index=2)
-        bike_kg = BIKE_WEIGHT_EST[category][mat][{"Entry-Level": 0, "Mid-Level": 1, "High-End": 2}[level]] + SIZE_WEIGHT_MODS[size] + (EBIKE_WEIGHT_PENALTY_KG if is_ebike else 0.0)
-        frame_size_log = size
-    else:
-        frame_size_log = st.selectbox("Frame Size", list(SIZE_WEIGHT_MODS.keys()), index=2)
-        bike_input = st.number_input(f"Bike Weight ({u_mass_label})", 7.0, 45.0, defaults["bike_mass_def_kg"] + (EBIKE_WEIGHT_PENALTY_KG if is_ebike else 0.0), 0.1)
-        bike_kg = bike_input * LB_TO_KG if unit_mass == "North America (lbs)" else bike_input
-    
-    unsprung_input = st.number_input(f"Unsprung Weight ({u_mass_label})", 0.0, 25.0, 4.27 + (2.0 if is_ebike else 0.0), 0.01)
-    unsprung_kg = unsprung_input * LB_TO_KG if unit_mass == "North America (lbs)" else unsprung_input
-
-with col_c2:
-    if 'rear_bias_slider' not in st.session_state: st.session_state.rear_bias_slider = defaults["bias"]
-    final_bias_calc = st.slider("Rear Bias (%)", 55, 80, key="rear_bias_slider")
-    total_system_kg = rider_kg + gear_kg + bike_kg
-    # FIX 1: Applied bias to sprung mass only
-    sprung_mass_kg = total_system_kg - unsprung_kg
-    rear_val_kg = (sprung_mass_kg * (final_bias_calc/100)) + (unsprung_kg if final_bias_calc > 0 else 0)
-    st.info(f"Weight Distribution: Front **{(total_system_kg - rear_val_kg):.1f}{u_mass_label}** | Rear **{rear_val_kg:.1f}{u_mass_label}**")
-
-# --- KINEMATICS ---
-st.header("3. Shock & Kinematics")
-col_k1, col_k2 = st.columns(2)
+# --- LOCKED STROKE IMPLEMENTATION ---
 if is_db_bike:
-    raw_travel, raw_stroke, raw_prog, raw_lr_start = float(selected_bike_data['Travel_mm']), float(selected_bike_data['Shock_Stroke']), float(selected_bike_data['Progression_Pct']), float(selected_bike_data['Start_Leverage'])
+    default_stroke = float(selected_bike_data['Shock_Stroke'])
+    stroke_disabled = True
 else:
-    raw_travel, raw_stroke, raw_prog, raw_lr_start = defaults["travel"], defaults["stroke"], float(defaults["progression"]), float(defaults["lr_start"])
+    default_stroke = defaults["stroke"]
+    stroke_disabled = False
 
-with col_k1:
-    travel_in = st.number_input(f"Rear Travel ({u_len_label})", 0.0, 300.0, float(raw_travel if unit_len == "Millimetres (mm)" else raw_travel * MM_TO_IN), 1.0)
-    # FIX 2: Stroke lock for DB bikes
-    stroke_in = st.number_input(f"Shock Stroke ({u_len_label})", 1.5, 100.0, float(raw_stroke if unit_len == "Millimetres (mm)" else raw_stroke * MM_TO_IN), 0.5, disabled=is_db_bike)
-    travel_mm = travel_in * IN_TO_MM if unit_len == "Inches (\")" else travel_in
-    stroke_mm = stroke_in * IN_TO_MM if unit_len == "Inches (\")" else stroke_in
-
-calc_lr_start = travel_mm / stroke_mm if stroke_mm > 0 else 0
-
-with col_k2:
-    adv_kinematics = st.checkbox("Advanced Kinematics", value=(is_db_bike or manual_entry_mode))
-    if adv_kinematics:
-        lr_start, prog_pct = st.number_input("LR Start Rate", 1.5, 4.0, raw_lr_start, 0.05), st.number_input("Progression (%)", -10.0, 60.0, raw_prog, 1.0)
-        calc_lr_start = lr_start
-    else:
-        prog_pct = float(defaults["progression"])
-
-# --- SPRING SELECTION ---
-st.header("4. Spring Compatibility & Selection")
-col_comp, col_sel = st.columns([0.6, 0.4])
-with col_comp:
-    has_hbo = st.checkbox("Shock has HBO?")
-    analysis = analyze_spring_compatibility(progression_pct=prog_pct, has_hbo=has_hbo)
-    for s_type, info in analysis.items():
-        st.markdown(f"**{info['status']} {s_type}**: {info['msg']}")
-with col_sel:
-    spring_type_sel = st.selectbox("Select Spring Type", ["Standard Steel (Linear)", "Lightweight Steel/Ti (linear)", "Sprindex (20% end progression)", "Progressive Spring"])
-
-st.header("5. Setup Preferences")
-target_sag = st.slider("Target Sag (%)", 20.0, 40.0, float(defaults["base_sag"]), 0.5)
-
-# ==========================================================
-# 4. CALCULATIONS
-# ==========================================================
-total_drop = calc_lr_start * (prog_pct / 100)
-effective_lr = calc_lr_start - (total_drop * (target_sag / 100)) if adv_kinematics else travel_mm / stroke_mm
-eff_rider_kg = rider_kg + (gear_kg * COUPLING_COEFFS[category])
-# FIX 1 continued: Unsprung mass handling in load calculation
-rear_load_lbs = max(0, (sprung_mass_kg * (final_bias_calc / 100))) * KG_TO_LB
-raw_rate = (rear_load_lbs * effective_lr) / (stroke_mm * (target_sag / 100) * MM_TO_IN) if stroke_mm > 0 else 0
-if spring_type_sel == "Progressive Spring": raw_rate *= PROGRESSIVE_CORRECTION_FACTOR
-
-# ==========================================================
-# 5. RESULTS
-# ==========================================================
-st.divider()
-st.header("Results")
-if raw_rate > 0:
-    res_c1, res_c2 = st.columns(2)
-    res_c1.metric("Calculated spring rate", f"{int(raw_rate)} lbs/in")
-    sag_val = stroke_mm * (target_sag / 100)
-    sag_display = sag_val if unit_len == "Millimetres (mm)" else sag_val * MM_TO_IN
-    res_c2.metric("Target Sag", f"{target_sag:.1f}% ({sag_display:.2f} {u_len_label})")
-
-    final_rate_for_tuning = int(round(raw_rate / 25) * 25)
-    alt_rates = []
-
-    if "Sprindex" in spring_type_sel:
-        family = "XC/Trail (55mm)" if stroke_mm <= 55 else "Enduro (65mm)" if stroke_mm <= 65 else "DH (75mm)"
-        ranges = SPRINDEX_DATA[family]["ranges"]
-        found_match, gap_neighbors, chosen_range = False, [], ""
-        for i, r_str in enumerate(ranges):
-            low, high = map(int, r_str.split("-"))
-            if low <= raw_rate <= high:
-                st.success(f"Perfect Fit: {r_str} lbs/in")
-                chosen_range, final_rate_for_tuning, found_match = r_str, int(round(raw_rate / 5) * 5), True
-                break
-            if i > 0:
-                prev_high = int(ranges[i-1].split("-")[1])
-                if prev_high < raw_rate < low: gap_neighbors = [(ranges[i-1], prev_high), (r_str, low)]
-        
-        if not found_match and gap_neighbors:
-            gap_choice = st.radio("Choose option:", [f"Option A: {gap_neighbors[0][0]} (Plush)", f"Option B: {gap_neighbors[1][0]} (Supportive)"])
-            chosen_range = gap_neighbors[0][0] if "Option A" in gap_choice else gap_neighbors[1][0]
-            final_rate_for_tuning = gap_neighbors[0][1] if "Option A" in gap_choice else gap_neighbors[1][1]
-        
-        st.markdown(f"**Sprindex Model:** {family} ({chosen_range} lbs)")
-        step = 5 if family != "DH (75mm)" else 10
-        center_sprindex = int(round(final_rate_for_tuning / step) * step)
-        for r in [center_sprindex - (2*step), center_sprindex - step, center_sprindex, center_sprindex + step, center_sprindex + (2*step)]:
-            if r <= 0: continue
-            r_sag_pct = ((rear_load_lbs * effective_lr / r) / (stroke_mm * MM_TO_IN)) * 100
-            alt_rates.append({"Rate (lbs)": f"{r} lbs", "Resulting Sag": f"{r_sag_pct:.1f}%", "Feel": "Plush" if r < center_sprindex else "Supportive" if r > center_sprindex else "Target"})
-    else:
-        spring_size_display = stroke_mm + 5 if unit_len == "Millimetres (mm)" else (stroke_mm * MM_TO_IN) + 0.25
-        st.markdown(f"**Required Spring Size:** {spring_size_display:.2f} {u_len_label} Stroke")
-        center_rate = int(round(raw_rate / 25) * 25)
-        for r in [center_rate - 50, center_rate - 25, center_rate, center_rate + 25, center_rate + 50]:
-            if r <= 0: continue
-            r_sag_pct = ((rear_load_lbs * effective_lr / r) / (stroke_mm * MM_TO_IN)) * 100
-            alt_rates.append({"Rate (lbs)": f"{r} lbs", "Resulting Sag": f"{r_sag_pct:.1f}%", "Feel": "Plush" if r < center_rate else "Supportive" if r > center_rate else "Target"})
-    
-    st.table(alt_rates)
-
-    st.subheader(f"Fine Tuning (Preload - {final_rate_for_tuning} lbs spring)")
-    preload_data = []
-    for turns in [0.5, 1.0, 1.5, 2.0, 2.5, 3.0]:
-        sag_val_calc = (rear_load_lbs * effective_lr / final_rate_for_tuning) - (turns * 1.0 * MM_TO_IN)
-        sag_pct = (sag_val_calc / (stroke_mm * MM_TO_IN)) * 100
-        preload_data.append({"Turns": turns, "Sag (%)": f"{sag_pct:.1f}%", "Status": "OK" if 1.0 <= turns < 3.0 else "Caution"})
-    st.dataframe(pd.DataFrame(preload_data), hide_index=True)
-
-    def generate_pdf():
-        pdf = FPDF()
-        pdf.add_page()
-        pdf.set_font("Arial", 'B', 16); pdf.cell(200, 10, "MTB Spring Rate Calculation Report", ln=True, align='C')
-        pdf.set_font("Arial", size=11); pdf.ln(10)
-        pdf.set_font("Arial", 'B', 12); pdf.cell(200, 10, "1. Calculation Summary", ln=True)
-        pdf.set_font("Arial", size=10)
-        pdf.cell(200, 8, f"Bike: {bike_model_log}", ln=True)
-        pdf.cell(200, 8, f"Sprung Mass: {sprung_mass_kg:.1f} kg | Unsprung: {unsprung_kg:.1f} kg", ln=True)
-        pdf.cell(200, 8, f"Calculated Rear Load: {rear_load_lbs:.1f} lbs", ln=True)
-        pdf.cell(200, 8, f"Mathematical Baseline: {int(raw_rate)} lbs/in", ln=True)
-        pdf.ln(5); pdf.set_font("Arial", 'B', 12); pdf.cell(200, 10, "2. Setup Guide", ln=True)
-        pdf.set_font("Arial", size=10); pdf.cell(200, 8, f"Spring Type: {spring_type_sel}", ln=True)
-        return pdf.output(dest="S").encode("latin-1")
-
-    st.download_button(label="Export Results to PDF", data=generate_pdf(), file_name=f"MTB_Spring_Report_{datetime.datetime.now().strftime('%Y%m%d')}.pdf", mime="application/pdf")
-
-# --- LOGGING ---
-flat_log = {
-    "Timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-    "Chassis": chassis_type, "Bike_Model": bike_model_log, "Frame_Size": frame_size_log,
-    "Sprung_Mass_Kg": round(sprung_mass_kg, 1), "Unsprung_Mass_Kg": round(unsprung_kg, 1),
-    "Target_Sag_Pct": target_sag, "Calculated_Spring_Rate": int(raw_rate) if raw_rate else 0,
-    "Stroke_Locked": is_db_bike, "Start_LR": round(calc_lr_start, 2), "Progression": round(prog_pct, 1)
-}
-
-try:
-    conn = st.connection("gsheets", type=GSheetsConnection)
-    if st.button("Save to Google Sheets", type="primary"):
-        existing_data = conn.read(worksheet="Sheet1", ttl=5)
-        conn.update(worksheet="Sheet1", data=pd.concat([existing_data, pd.DataFrame([flat_log])], ignore_index=True))
-        st.success("Setup successfully logged!")
-except Exception as e: st.error(f"Cloud Connection Inactive: {e}.")
+stroke_mm = st.selectbox("Shock Stroke (mm)", COMMON_STROKES, index=COMMON_STROKES.index(default_stroke), disabled=stroke_disabled)
