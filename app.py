@@ -432,15 +432,17 @@ Rider mass distribution is a dynamic state influenced by both equipment and tech
 * **External Factors**: Gear weight (packs/armour), unsprung mass (tyres/inserts), and terrain gradients change the effective sag point and the inertia the suspension must control.
 
 **Limitations of reviews and professional protocols**
+
 External data from reviewers is often non-transferable due to differences in technical proficiency, trail gradients, and specific bike-shock combinations. While professional riders provide a performance benchmark, their setup protocols differ significantly from consumer experiences:
 
 * **Base Tuning**: Professionals start with factory default settings to isolate how subsequent changes affect the bike's neutral handling.
 * **Technical Support**: Elite riders rely on manufacturer technicians for internal modifications (proprietary valving/shim stacks). The athlete often communicates desired "feel" rather than mechanical specifics, which technicians then execute.
 
 **Challenges for the non-professional**
+
 Beginner and intermediate riders face "setup paralysis" due to technical information overload without the context of trail feel. Unlike professionals, consumers lack a dedicated technical team and immediate access to multiple spring increments or proprietary valving/shim stacks. This makes distinguishing between spring rate issues and damping issues difficult.
 
-Because fixed-rate coils rarely meet all terrain requirements, iterative testing with multiple springs (25 lb/in increments) or adjustable systems like Sprindex is necessary to achieve the required balance of small-bump sensitivity and bottom-out resistance.
+Because fixed-rate coils rarely meet all terrain requirements, iterative testing with multiple springs (25 lb/in increments) or adjustable systems is necessary to achieve the required balance of small-bump sensitivity and bottom-out resistance.
 """
 
 st.info(disclaimer_text)
