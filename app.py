@@ -26,6 +26,18 @@ PROGRESSIVE_CORRECTION_FACTOR = 0.97
 EBIKE_WEIGHT_PENALTY_KG = 8.5
 COMMON_STROKES = [45.0, 50.0, 55.0, 57.5, 60.0, 62.5, 65.0, 70.0, 75.0]
 
+SIZE_WEIGHT_MODS = {"XS": -0.5, "S": -0.25, "M": 0.0, "L": 0.3, "XL": 0.6, "XXL": 0.95}
+
+BIKE_WEIGHT_EST = {
+    "Downcountry": {"Carbon": [12.2, 11.4, 10.4], "Aluminium": [13.8, 13.1, 12.5]},
+    "Trail": {"Carbon": [14.1, 13.4, 12.8], "Aluminium": [15.4, 14.7, 14.0]},
+    "All-Mountain": {"Carbon": [15.0, 14.2, 13.5], "Aluminium": [16.2, 15.5, 14.8]},
+    "Enduro": {"Carbon": [16.2, 15.5, 14.8], "Aluminium": [17.5, 16.6, 15.8]},
+    "Long Travel Enduro": {"Carbon": [16.8, 16.0, 15.2], "Aluminium": [18.0, 17.2, 16.5]},
+    "Enduro (Race focus)": {"Carbon": [16.0, 15.2, 14.5], "Aluminium": [17.2, 16.3, 15.5]},
+    "Downhill (DH)": {"Carbon": [17.8, 17.0, 16.2], "Aluminium": [19.5, 18.5, 17.5]}
+}
+
 CATEGORY_DATA = {
     "Downcountry": {"travel": 115, "stroke": 45.0, "base_sag": 28, "progression": 15, "lr_start": 2.82, "desc": "110–120 mm", "bike_mass_def_kg": 12.0, "bias": 60},
     "Trail": {"travel": 130, "stroke": 50.0, "base_sag": 30, "progression": 19, "lr_start": 2.90, "desc": "120–140 mm", "bike_mass_def_kg": 13.5, "bias": 63},
@@ -166,10 +178,30 @@ defaults = CATEGORY_DATA[category]
 
 col_c1, col_c2 = st.columns(2)
 with col_c1:
-    bike_input = st.number_input(f"Bike Weight ({u_mass_label})", 7.0, 45.0, defaults["bike_mass_def_kg"] + (EBIKE_WEIGHT_PENALTY_KG if is_ebike else 0.0), 0.1)
-    bike_kg = bike_input * LB_TO_KG if unit_mass == "North America (lbs)" else bike_input
-    unsprung_input = st.number_input(f"Unsprung Weight ({u_mass_label})", 0.0, 25.0, 4.27 + (2.0 if is_ebike else 0.0), 0.01)
-    unsprung_kg = unsprung_input * LB_TO_KG if unit_mass == "North America (lbs)" else unsprung_input
+    weight_mode = st.radio("Bike Weight Mode", ["Manual Input", "Estimate"], horizontal=True)
+    if weight_mode == "Estimate":
+        mat = st.selectbox("Frame Material", ["Carbon", "Aluminium"])
+        level = st.selectbox("Build Level", ["Entry-Level", "Mid-Level", "High-End"])
+        size = st.selectbox("Size", list(SIZE_WEIGHT_MODS.keys()), index=2)
+        base = BIKE_WEIGHT_EST[category][mat][{"Entry-Level": 0, "Mid-Level": 1, "High-End": 2}[level]]
+        bike_kg = base + SIZE_WEIGHT_MODS[size] + (EBIKE_WEIGHT_PENALTY_KG if is_ebike else 0.0)
+        st.caption(f"Estimated weight: {bike_kg:.2f} kg")
+    else:
+        bike_input = st.number_input(f"Bike Weight ({u_mass_label})", 7.0, 45.0, defaults["bike_mass_def_kg"] + (EBIKE_WEIGHT_PENALTY_KG if is_ebike else 0.0), 0.1)
+        bike_kg = bike_input * LB_TO_KG if unit_mass == "North America (lbs)" else bike_input
+
+    unsprung_mode = st.toggle("Estimate Unsprung Mass", value=False)
+    if unsprung_mode:
+        u_tier = st.selectbox("Wheelset Tier", ["Light", "Standard", "Heavy"], index=1)
+        u_mat = st.selectbox("Rear Triangle", ["Carbon", "Aluminium"], index=1)
+        inserts = st.checkbox("Tyre Inserts?")
+        wheels = {"Light": 1.7, "Standard": 2.3, "Heavy": 3.0}[u_tier]
+        swingarm = 0.4 if u_mat == "Carbon" else 0.7
+        unsprung_kg = 1.0 + wheels + swingarm + (0.5 if inserts else 0.0) + (1.5 if is_ebike else 0.0)
+        st.caption(f"Estimated unsprung: {unsprung_kg:.2f} kg")
+    else:
+        unsprung_input = st.number_input(f"Unsprung ({u_mass_label})", 0.0, 25.0, 4.27 + (2.0 if is_ebike else 0.0), 0.1)
+        unsprung_kg = unsprung_input * LB_TO_KG if unit_mass == "North America (lbs)" else unsprung_input
 
 with col_c2:
     if 'rear_bias_slider' not in st.session_state: st.session_state.rear_bias_slider = defaults["bias"]
@@ -261,8 +293,6 @@ if spring_type_sel == "Progressive Spring": raw_rate *= PROGRESSIVE_CORRECTION_F
 # ==========================================================
 st.divider()
 st.header("Results")
-
-
 
 if raw_rate > 0:
     res_c1, res_c2 = st.columns(2)
