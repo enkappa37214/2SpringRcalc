@@ -123,8 +123,10 @@ def analyze_spring_compatibility(progression_pct, has_hbo):
 
 # --- CALLBACKS ---
 def update_bias_from_category():
-    cat = st.session_state.category_select
-    st.session_state.rear_bias_slider = CATEGORY_DATA[cat]["bias"]
+    # Force update the slider in session state based on new category
+    if 'category_select' in st.session_state:
+        cat = st.session_state.category_select
+        st.session_state.rear_bias_slider = CATEGORY_DATA[cat]["bias"]
 
 def update_category_from_bike():
     selected_model = st.session_state.bike_selector
@@ -270,11 +272,14 @@ with col_c2:
     rear_bias_in = st.slider("Base Bias (%)", 55, 75, key="rear_bias_slider", label_visibility="collapsed")
     final_bias_calc = rear_bias_in
     
-    # RE-ADDED: Dynamic/Attack text and Skill Modifier logic
+    # FIXED: Restored (Dynamic/Attack) text
     st.caption(f"Category Default: **{cat_def_bias}%** (Dynamic/Attack)")
+    
     if skill_suggestion != 0:
         advice_sign = "+" if skill_suggestion > 0 else ""
         st.info(f"💡 Skill Modifier: **{advice_sign}{skill_suggestion}%** bias recommended.")
+    else:
+        st.info(f"💡 Skill Modifier: **0%** bias adjustment recommended.")
 
 # --- Unsprung Mass ---
 with col_c1:
@@ -495,7 +500,6 @@ if raw_rate > 0:
 else:
     st.error("Ensure Stroke and Travel are > 0.")
 
-# RE-ADDED: Disclaimers
 st.info("""
 **Disclaimers:**
 * **Rate Tolerance:** Standard coils vary +/- 5%.
