@@ -17,34 +17,35 @@ STONE_TO_KG = 6.35029
 PROGRESSIVE_CORRECTION_FACTOR = 0.97
 
 # --- Data Tables ---
+# UPDATED v12.10: Kinematics aligned with 600+ bike database analysis
 CATEGORY_DATA = {
     "Downcountry": {
         "travel": 115, "stroke": 45.0, "base_sag": 28,
-        "progression": 12, "lr_start": 2.75, "desc": "110–120 mm", "bike_mass_def_kg": 12.0, "bias": 60
+        "progression": 15, "lr_start": 2.82, "desc": "110–120 mm", "bike_mass_def_kg": 12.0, "bias": 60
     },
     "Trail": {
         "travel": 130, "stroke": 50.0, "base_sag": 30,
-        "progression": 15, "lr_start": 2.80, "desc": "120–140 mm", "bike_mass_def_kg": 13.5, "bias": 63
+        "progression": 19, "lr_start": 2.90, "desc": "120–140 mm", "bike_mass_def_kg": 13.5, "bias": 63
     },
     "All-Mountain": {
         "travel": 145, "stroke": 55.0, "base_sag": 31,
-        "progression": 18, "lr_start": 2.90, "desc": "140–150 mm", "bike_mass_def_kg": 14.5, "bias": 65
+        "progression": 21, "lr_start": 2.90, "desc": "140–150 mm", "bike_mass_def_kg": 14.5, "bias": 65
     },
     "Enduro": {
-        "travel": 160, "stroke": 62.5, "base_sag": 33,
-        "progression": 22, "lr_start": 3.00, "desc": "150–170 mm", "bike_mass_def_kg": 15.10, "bias": 67
+        "travel": 160, "stroke": 60.0, "base_sag": 33,
+        "progression": 23, "lr_start": 3.00, "desc": "150–170 mm", "bike_mass_def_kg": 15.10, "bias": 67
     },
     "Long Travel Enduro": {
         "travel": 175, "stroke": 65.0, "base_sag": 34,
-        "progression": 25, "lr_start": 3.05, "desc": "170–180 mm", "bike_mass_def_kg": 16.5, "bias": 69
+        "progression": 27, "lr_start": 3.16, "desc": "170–180 mm", "bike_mass_def_kg": 16.5, "bias": 69
     },
     "Enduro (Race focus)": {
         "travel": 165, "stroke": 62.5, "base_sag": 32,
         "progression": 26, "lr_start": 3.13, "desc": "160–170 mm", "bike_mass_def_kg": 15.8, "bias": 68
     },
     "Downhill (DH)": {
-        "travel": 200, "stroke": 75.0, "base_sag": 35,
-        "progression": 30, "lr_start": 3.14, "desc": "180–210 mm", "bike_mass_def_kg": 17.5, "bias": 72
+        "travel": 200, "stroke": 72.5, "base_sag": 35,
+        "progression": 28, "lr_start": 3.28, "desc": "180–210 mm", "bike_mass_def_kg": 17.5, "bias": 72
     }
 }
 
@@ -232,7 +233,7 @@ category = st.selectbox(
     format_func=lambda x: f"{x} ({CATEGORY_DATA[x]['desc']})",
     key='category_select',
     index=3,  # Default to Enduro
-    on_change=update_bias_from_category # ADDED: ensures slider updates when category changes
+    on_change=update_bias_from_category 
 )
 defaults = CATEGORY_DATA[category]
 
@@ -273,7 +274,6 @@ with col_c2:
             st.session_state.rear_bias_slider = cat_def_bias
             st.rerun()
     
-    # Initialize session state for the slider if not present
     if 'rear_bias_slider' not in st.session_state:
         st.session_state.rear_bias_slider = cat_def_bias
         
