@@ -117,7 +117,7 @@ with col_reset:
     if st.button("Reset", on_click=reset_form_callback, type="secondary", use_container_width=True):
         st.rerun()
 
-st.caption("Capability Notice: Built for personal use.")
+st.caption("Built for fun, don't take it to seriously.")
 
 bike_db = load_bike_database()
 
