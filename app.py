@@ -263,4 +263,40 @@ if raw_rate > 0:
         pdf.add_page(); pdf.set_font("Arial", 'B', 16); pdf.cell(200, 10, "MTB Spring Rate Report", ln=True, align='C')
         pdf.set_font("Arial", size=10); pdf.cell(200, 10, f"Bike: {bike_model_log} | Rate: {int(raw_rate)} lbs/in", ln=True)
         return pdf.output(dest="S").encode("latin-1")
-    st.download_button("Export Results to PDF", data=
+    st.download_button("Export Results to PDF", data=generate_pdf(), file_name="MTB_Spring_Report.pdf")
+
+# --- LOGGING (GOOGLE SHEETS INTEGRATION) ---
+st.divider()
+st.subheader("Telemetry Log")
+flat_log = {
+    "Timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    "Chassis": chassis_type,
+    "Bike_Model": bike_model_log,
+    "Frame_Size": size_selected,
+    "Rider_Weight_Kg": round(rider_kg, 1),
+    "Bike_Weight_Kg": round(bike_kg, 1),
+    "Sprung_Mass_Kg": round(sprung_mass_kg, 1),
+    "Unsprung_Mass_Kg": round(unsprung_kg, 1),
+    "Target_Sag_Pct": target_sag,
+    "Calculated_Spring_Rate": int(raw_rate),
+    "Kinematics_Source": "Verified DB" if selected_bike_data is not None else "User Manual",
+    "Bike_Weight_Source": bike_weight_source,
+    "Unsprung_Mass_Source": unsprung_source,
+    "Bias_Setting": f"{final_bias_calc}%",
+    "Travel_mm": round(travel_mm, 1),
+    "Stroke_mm": round(stroke_mm, 1),
+    "Start_LR_Log": round(calc_lr_start, 2),
+    "Progression_Log": round(prog_pct, 1),
+    "Submission_Type": "Verified" if selected_bike_data is not None else "User_Contributed"
+}
+
+try:
+    conn = st.connection("gsheets", type=GSheetsConnection)
+    if st.button("Save Configuration to Cloud", type="primary"):
+        existing_data = conn.read(worksheet="Sheet1", ttl=0)
+        conn.update(worksheet="Sheet1", data=pd.concat([existing_data, pd.DataFrame([flat_log])], ignore_index=True))
+        st.success("Telemetry successfully synced.")
+except Exception as e: st.error(f"Cloud Connection Failed: {e}")
+
+st.markdown("---"); st.subheader("Engineering Disclaimer")
+st.info("Theoretical baseline derived from static mass properties. Physical verification via sag measurement is mandatory.")
