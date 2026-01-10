@@ -32,7 +32,7 @@ CATEGORY_DATA = {
     },
     "Enduro": {
         "travel": 160, "stroke": 62.5, "base_sag": 33,
-        "progression": 22, "lr_start": 3.00, "desc": "150–170 mm", "bike_mass_def_kg": 15.11, "bias": 67
+        "progression": 22, "lr_start": 3.00, "desc": "150–170 mm", "bike_mass_def_kg": 15.10, "bias": 67
     },
     "Long Travel Enduro": {
         "travel": 175, "stroke": 65.0, "base_sag": 34,
@@ -67,9 +67,9 @@ SIZE_WEIGHT_MODS = {"XS": -0.5, "S": -0.25, "M": 0.0, "L": 0.3, "XL": 0.6, "XXL"
 
 BIKE_WEIGHT_EST = {
     "Downcountry": {"Carbon": [12.2, 11.4, 10.4], "Aluminium": [13.8, 13.1, 12.5]},
-    "Trail":       {"Carbon": [14.1, 13.4, 12.8], "Aluminium": [15.4, 14.7, 14.0]},
+    "Trail":        {"Carbon": [14.1, 13.4, 12.8], "Aluminium": [15.4, 14.7, 14.0]},
     "All-Mountain":{"Carbon": [15.0, 14.2, 13.5], "Aluminium": [16.2, 15.5, 14.8]},
-    "Enduro":      {"Carbon": [16.2, 15.5, 14.8], "Aluminium": [17.5, 16.6, 15.8]},
+    "Enduro":       {"Carbon": [16.2, 15.5, 14.8], "Aluminium": [17.5, 16.6, 15.8]},
     "Long Travel Enduro": {"Carbon": [16.8, 16.0, 15.2], "Aluminium": [18.0, 17.2, 16.5]},
     "Enduro (Race focus)": {"Carbon": [16.0, 15.2, 14.5], "Aluminium": [17.2, 16.3, 15.5]},
     "Downhill (DH)": {"Carbon": [17.8, 17.0, 16.2], "Aluminium": [19.5, 18.5, 17.5]}
@@ -129,6 +129,11 @@ def analyze_spring_compatibility(progression_pct, has_hbo):
     return analysis
 
 # --- CALLBACKS ---
+def update_bias_from_category():
+    """Update rear bias slider when category changes manually"""
+    cat = st.session_state.category_select
+    st.session_state.rear_bias_slider = CATEGORY_DATA[cat]["bias"]
+
 def update_category_from_bike():
     selected_model = st.session_state.bike_selector
     bike_db = load_bike_database()
@@ -225,7 +230,9 @@ category = st.selectbox(
     "Category (Determines Weight Bias)",
     cat_options,
     format_func=lambda x: f"{x} ({CATEGORY_DATA[x]['desc']})",
-    key='category_select' 
+    key='category_select',
+    index=3,  # Default to Enduro
+    on_change=update_bias_from_category # ADDED: ensures slider updates when category changes
 )
 defaults = CATEGORY_DATA[category]
 
@@ -266,10 +273,11 @@ with col_c2:
             st.session_state.rear_bias_slider = cat_def_bias
             st.rerun()
     
+    # Initialize session state for the slider if not present
     if 'rear_bias_slider' not in st.session_state:
         st.session_state.rear_bias_slider = cat_def_bias
         
-    rear_bias_in = st.slider("Base Bias (%)", 55, 85, key="rear_bias_slider", label_visibility="collapsed")
+    rear_bias_in = st.slider("Base Bias (%)", 55, 75, key="rear_bias_slider", label_visibility="collapsed")
     final_bias_calc = rear_bias_in
 
     st.caption(f"Category Default: **{cat_def_bias}%** (Dynamic/Attack)")
