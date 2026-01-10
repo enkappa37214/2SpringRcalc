@@ -173,7 +173,14 @@ if manual_entry_mode:
     with col_new3: new_name = st.text_input("Model", placeholder="e.g. NOMAD")
     bike_model_log = f"{new_year} {new_brand.upper()} {new_name.upper()}".strip()
 
-category = st.selectbox("Category", list(CATEGORY_DATA.keys()), key='category_select', on_change=update_bias_from_category)
+category = st.selectbox(
+    "Category", 
+    options=list(CATEGORY_DATA.keys()), 
+    format_func=lambda x: f"{x} ({CATEGORY_DATA[x]['desc']})",
+    key='category_select', 
+    on_change=update_bias_from_category
+)
+
 defaults = CATEGORY_DATA[category]
 
 col_c1, col_c2 = st.columns(2)
