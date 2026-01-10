@@ -56,7 +56,7 @@ def load_bike_database():
         for c in cols:
             df[c] = pd.to_numeric(df[c], errors='coerce')
         return df.sort_values('Model')
-    except FileNotFoundError:
+    except Exception:
         return pd.DataFrame()
 
 def estimate_unsprung(wheel_tier, frame_mat, has_inserts, is_ebike):
@@ -67,27 +67,6 @@ def estimate_unsprung(wheel_tier, frame_mat, has_inserts, is_ebike):
     motor_modifier = 1.5 if is_ebike else 0.0 
     return base + wheels + swingarm + inserts + motor_modifier
 
-def analyze_spring_compatibility(progression_pct, has_hbo):
-    analysis = {"Linear": {"status": "", "msg": ""}, "Progressive": {"status": "", "msg": ""}}
-    if progression_pct > 25:
-        analysis["Linear"]["status"] = "✅ Optimal"
-        analysis["Linear"]["msg"] = "Matches frame kinematics perfectly."
-        analysis["Progressive"]["status"] = "⚠️ Avoid"
-        analysis["Progressive"]["msg"] = "Risk of harsh 'Wall Effect' at bottom-out."
-    elif 12 <= progression_pct <= 25:
-        analysis["Linear"]["status"] = "✅ Compatible"
-        analysis["Linear"]["msg"] = "Use for a plush coil feel."
-        analysis["Progressive"]["status"] = "✅ Compatible"
-        analysis["Progressive"]["msg"] = "Use for more 'pop' and bottom-out resistance."
-        if has_hbo: analysis["Linear"]["msg"] += " (HBO handles bottom-out)."
-    else:
-        analysis["Linear"]["status"] = "⚠️ Caution"
-        analysis["Linear"]["msg"] = "High risk of bottom-out without strong HBO."
-        analysis["Progressive"]["status"] = "✅ Optimal"
-        analysis["Progressive"]["msg"] = "Essential to compensate for lack of ramp-up."
-    return analysis
-
-# --- CALLBACKS ---
 def update_bias_from_category():
     if 'category_select' in st.session_state:
         cat = st.session_state.category_select
@@ -96,147 +75,124 @@ def update_bias_from_category():
 def update_category_from_bike():
     selected_model = st.session_state.bike_selector
     bike_db = load_bike_database()
-    if selected_model and selected_model != "Model Not Found - Add New":
+    if selected_model:
         bike_row = bike_db[bike_db['Model'] == selected_model].iloc[0]
         t = bike_row['Travel_mm']
         cat_keys = list(CATEGORY_DATA.keys())
-        if t < 125: new_idx = 0
-        elif t < 140: new_idx = 1
-        elif t < 155: new_idx = 2
-        elif t < 170: new_idx = 3
-        elif t < 185: new_idx = 4
-        else: new_idx = 6 
-        st.session_state.category_select = cat_keys[new_idx]
-        st.session_state.rear_bias_slider = CATEGORY_DATA[cat_keys[new_idx]]["bias"]
+        if t < 125: idx = 0
+        elif t < 140: idx = 1
+        elif t < 155: idx = 2
+        elif t < 170: idx = 3
+        elif t < 185: idx = 4
+        else: idx = 6 
+        st.session_state.category_select = cat_keys[idx]
+        st.session_state.rear_bias_slider = CATEGORY_DATA[cat_keys[idx]]["bias"]
 
 # ==========================================================
-# 3. UI MAIN
+# 3. UI MAIN & CHASSIS
 # ==========================================================
 st.title("MTB Spring Rate Calculator")
 st.caption("Capability Notice: This tool was built for personal use. If you find an error, please signal the developer.")
 
 bike_db = load_bike_database()
 
-with st.expander("⚙️ Settings & Units", expanded=False):
+with st.expander("⚙️ Settings & Units"):
     col_u1, col_u2 = st.columns(2)
     with col_u1: unit_mass = st.radio("Mass Units", ["Global (kg)", "North America (lbs)", "UK Hybrid (st & kg)"])
     with col_u2: unit_len = st.radio("Length Units", ["Millimetres (mm)", "Inches (\")"])
 
-# ==========================================================
-# 4. RIDER PROFILE
-# ==========================================================
 st.header("1. Rider Profile")
 col_r1, col_r2 = st.columns(2)
 with col_r1: skill = st.selectbox("Rider Skill", SKILL_LEVELS, index=2)
 with col_r2:
     if unit_mass == "UK Hybrid (st & kg)":
-        stone = st.number_input("Rider Weight (st)", 5.0, 20.0, 11.0, 0.5)
-        lbs_rem = st.number_input("Rider Weight (+lbs)", 0.0, 13.9, 0.0, 1.0)
+        stone, lbs_rem = st.number_input("Rider Weight (st)", 5.0, 20.0, 11.0, 0.5), st.number_input("Rider Weight (+lbs)", 0.0, 13.9, 0.0, 1.0)
         rider_kg = (stone * STONE_TO_KG) + (lbs_rem * LB_TO_KG)
     elif unit_mass == "North America (lbs)":
         rider_in = st.number_input("Rider Weight (lbs)", 90.0, 280.0, 160.0, 1.0)
         rider_kg = rider_in * LB_TO_KG
     else:
         rider_kg = st.number_input("Rider Weight (kg)", 40.0, 130.0, 68.0, 0.5)
-    
     gear_def = 5.0 if unit_mass == "North America (lbs)" else 4.0
-    gear_in = st.number_input("Gear Weight", 0.0, 25.0, gear_def, 0.5)
-    gear_kg = gear_in * LB_TO_KG if "lbs" in unit_mass else gear_in
+    gear_kg = st.number_input("Gear Weight (kg)", 0.0, 25.0, gear_def, 0.5)
 
-# ==========================================================
-# 5. CHASSIS DATA (ENHANCED UX)
-# ==========================================================
 st.header("2. Chassis Data")
 chassis_type = st.radio("Chassis Configuration", ["Analog Bike", "E-Bike"], horizontal=True)
 is_ebike = (chassis_type == "E-Bike")
 
-# --- DATABASE SELECTION ---
-selected_bike_data = None
-is_db_bike = False
-bike_model_log = ""
-
-# Path A: User looks for an existing bike
+# --- ENHANCED DUPLICATE DETECTION LOGIC ---
+selected_bike_data, is_db_bike, bike_model_log = None, False, ""
 col_search, col_toggle = st.columns([0.7, 0.3])
 
 with col_toggle:
-    # Explicit toggle makes it intuitive when search yields no results
-    manual_entry_mode = st.checkbox("Bike not listed?", help="Select this to manually add a new model to our database.")
+    manual_entry_mode = st.checkbox("Bike not listed?", help="Select to manually add a model to the database.")
 
 with col_search:
     if not manual_entry_mode:
         if not bike_db.empty:
-            bike_models = list(bike_db['Model'].unique())
-            selected_model = st.selectbox(
-                "🚲 Select Bike Model (Auto-Fill)", 
-                bike_models, 
-                index=None, 
-                placeholder="Type to search...", 
-                key='bike_selector', 
-                on_change=update_category_from_bike
-            )
-            
+            selected_model = st.selectbox("🚲 Select Bike Model (Auto-Fill)", list(bike_db['Model'].unique()), index=None, placeholder="Type to search...", key='bike_selector', on_change=update_category_from_bike)
             if selected_model:
-                selected_bike_data = bike_db[bike_db['Model'] == selected_model].iloc[0]
-                is_db_bike = True
-                bike_model_log = selected_model
+                selected_bike_data, is_db_bike, bike_model_log = bike_db[bike_db['Model'] == selected_model].iloc[0], True, selected_model
         else:
-            st.warning("Database unavailable. Manual entry enabled.")
             manual_entry_mode = True
 
-# Path B: User adds a new bike (Form appears below)
 if manual_entry_mode:
-    st.info("🛠️ **Community Contribution:** Enter your bike details below. These stats will be reviewed for our global database.")
+    st.info("🛠️ **Community Contribution:** Enter details below to help enrich the global database.")
     col_new1, col_new2, col_new3 = st.columns(3)
     with col_new1: new_year = st.number_input("Year", 2010, 2026, 2025)
     with col_new2: new_brand = st.text_input("Brand", placeholder="e.g. SANTA CRUZ")
     with col_new3: new_name = st.text_input("Model", placeholder="e.g. NOMAD")
+    bike_model_log = f"{new_year} {new_brand.upper()} {new_name.upper()}".strip()
     
-    # Standardise the name for the spreadsheet
-    if new_brand and new_name:
-        bike_model_log = f"{new_year} {new_brand.upper()} {new_name.upper()}"
+    # DUPLICATE DETECTION CHECK
+    if not bike_db.empty and bike_model_log in bike_db['Model'].values:
+        st.warning(f"⚠️ **Duplicate Detected:** '{bike_model_log}' already exists in the database. Please use the search bar above.")
+
+category = st.selectbox("Category", list(CATEGORY_DATA.keys()), format_func=lambda x: f"{x} ({CATEGORY_DATA[x]['desc']})", key='category_select', index=3, on_change=update_bias_from_category)
+defaults = CATEGORY_DATA[category]
+
+col_c1, col_c2 = st.columns(2)
+with col_c1:
+    weight_mode = st.radio("Bike Weight Mode", ["Manual Input", "Estimate"], horizontal=True)
+    if weight_mode == "Estimate":
+        mat, level, size = st.selectbox("Frame Material", ["Carbon", "Aluminium"]), st.selectbox("Build Level", ["Entry-Level", "Mid-Level", "High-End"]), st.selectbox("Size", list(SIZE_WEIGHT_MODS.keys()), index=2)
+        bike_kg = BIKE_WEIGHT_EST[category][mat][{"Entry-Level": 0, "Mid-Level": 1, "High-End": 2}[level]] + SIZE_WEIGHT_MODS[size] + (EBIKE_WEIGHT_PENALTY_KG if is_ebike else 0.0)
+        frame_size_log = size
     else:
-        bike_model_log = "User Contribution Pending"
-    
-    is_db_bike = False
-    # Force Advanced Kinematics to ensure we get Start/End LR data for the DB
-    st.session_state.adv_kinematics = True
+        frame_size_log = st.selectbox("Frame Size", list(SIZE_WEIGHT_MODS.keys()), index=2)
+        bike_kg = st.number_input("Bike Weight (kg)", 7.0, 36.0, defaults["bike_mass_def_kg"] + (EBIKE_WEIGHT_PENALTY_KG if is_ebike else 0.0), 0.1)
+
+with col_c2:
+    if 'rear_bias_slider' not in st.session_state: st.session_state.rear_bias_slider = defaults["bias"]
+    final_bias_calc = st.slider("Rear Bias (%)", 55, 75, key="rear_bias_slider")
+    unsprung_kg = st.number_input("Unsprung (kg)", 0.0, 25.0, 4.27 + (2.0 if is_ebike else 0.0), 0.01)
 
 # ==========================================================
-# 6. SHOCK & KINEMATICS
+# 4. KINEMATICS & CALCULATION
 # ==========================================================
 st.header("3. Shock & Kinematics")
 col_k1, col_k2 = st.columns(2)
 
 if is_db_bike:
-    raw_travel, raw_stroke, raw_prog, raw_lr_start, raw_lr_end = float(selected_bike_data['Travel_mm']), float(selected_bike_data['Shock_Stroke']), float(selected_bike_data['Progression_Pct']), float(selected_bike_data['Start_Leverage']), float(selected_bike_data['End_Leverage'])
+    raw_travel, raw_stroke, raw_prog, raw_lr_start = float(selected_bike_data['Travel_mm']), float(selected_bike_data['Shock_Stroke']), float(selected_bike_data['Progression_Pct']), float(selected_bike_data['Start_Leverage'])
 else:
     raw_travel, raw_stroke, raw_prog, raw_lr_start = defaults["travel"], defaults["stroke"], float(defaults["progression"]), float(defaults["lr_start"])
-    raw_lr_end = raw_lr_start * (1 - (raw_prog/100))
 
 with col_k1:
-    travel_mm = st.number_input("Rear Travel (mm)", 0.0, 300.0, float(raw_travel), 1.0)
-    stroke_mm = st.number_input("Shock Stroke (mm)", 1.5, 100.0, float(raw_stroke), 0.5)
+    travel_mm, stroke_mm = st.number_input("Rear Travel (mm)", 0.0, 300.0, float(raw_travel), 1.0), st.number_input("Shock Stroke (mm)", 1.5, 100.0, float(raw_stroke), 0.5)
 
 with col_k2:
-    adv_kinematics = st.checkbox("Advanced Kinematics", value=is_db_bike)
+    adv_kinematics = st.checkbox("Advanced Kinematics", value=(is_db_bike or manual_entry_mode))
     if adv_kinematics:
-        lr_start = st.number_input("LR Start Rate", 1.5, 4.0, raw_lr_start, 0.05)
-        prog_pct = st.number_input("Progression (%)", -10.0, 60.0, raw_prog, 1.0)
-        calc_lr_start, lr_end = lr_start, lr_start * (1 - (prog_pct/100))
+        lr_start, prog_pct = st.number_input("LR Start Rate", 1.5, 4.0, raw_lr_start, 0.05), st.number_input("Progression (%)", -10.0, 60.0, raw_prog, 1.0)
+        calc_lr_start = lr_start
     else:
         calc_lr_start, prog_pct = travel_mm / stroke_mm if stroke_mm > 0 else 0, float(defaults["progression"])
-    has_hbo = st.checkbox("Shock has HBO?")
 
-# ==========================================================
-# 7. CALCULATIONS & OUTPUT
-# ==========================================================
 st.header("4. Setup Preferences")
 target_sag = st.slider("Target Sag (%)", 20.0, 40.0, float(defaults["base_sag"]), 0.5)
-
 effective_lr = calc_lr_start - ((calc_lr_start - (calc_lr_start * (1 - (prog_pct/100)))) * (target_sag / 100)) if adv_kinematics else travel_mm / stroke_mm
-eff_rider_kg = rider_kg + (gear_kg * COUPLING_COEFFS[category])
-rear_load_lbs = ((eff_rider_kg + bike_kg) * (final_bias_calc / 100) - unsprung_kg) * KG_TO_LB
-raw_rate = (rear_load_lbs * effective_lr) / (stroke_mm * (target_sag / 100) * MM_TO_IN) if stroke_mm > 0 else 0
+raw_rate = (((rider_kg + gear_kg + bike_kg) * (final_bias_calc / 100) - unsprung_kg) * KG_TO_LB * effective_lr) / (stroke_mm * (target_sag / 100) * MM_TO_IN) if stroke_mm > 0 else 0
 
 st.divider()
 st.header("Results")
@@ -247,32 +203,37 @@ if raw_rate > 0:
 
 st.divider()
 st.subheader("Configuration Log")
-st.info("Help us improve: By logging your setup, you contribute this model's specific kinematic data (Travel, Stroke, and Leverage) to our global database.") #
-st.caption("Show Setup Data (For Export)")
+st.info("Help us improve: By logging your setup, you contribute kinematic data to our global database.")
 
 flat_log = {
     "Timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     "Chassis": chassis_type, "Bike_Model": bike_model_log, "Frame_Size": frame_size_log,
     "Rider_Weight_Kg": round(rider_kg, 1), "Bike_Weight_Kg": round(bike_kg, 1), "Target_Sag_Pct": target_sag,
     "Calculated_Spring_Rate": int(raw_rate) if raw_rate else 0,
-    "Kinematics_Source": "Database" if is_db_bike else "User Contributed", #
+    "Kinematics_Source": "Database" if is_db_bike else "User Contributed",
     "Bike_Weight_Source": "Estimated" if weight_mode == "Estimate" else "Manual Input",
-    "Unsprung_Mass_Source": "Estimated" if unsprung_mode else "Manual Input",
-    "Bias_Setting": "Default" if final_bias_calc == defaults["bias"] else f"Custom ({final_bias_calc - defaults['bias']:+d}%)",
-    "Travel_mm_Log": round(travel_mm, 1), "Stroke_mm_Log": round(stroke_mm, 1), #
-    "Start_LR_Log": round(calc_lr_start, 2), "Progression_Log": round(prog_pct, 1), #
-    "Submission_Type": "Verified" if is_db_bike else "User_Contributed" #
+    "Unsprung_Mass_Source": "Manual", "Bias_Setting": f"Custom ({final_bias_calc - defaults['bias']:+d}%)",
+    "Travel_mm_Log": round(travel_mm, 1), "Stroke_mm_Log": round(stroke_mm, 1),
+    "Start_LR_Log": round(calc_lr_start, 2), "Progression_Log": round(prog_pct, 1),
+    "Submission_Type": "Verified" if is_db_bike else "User_Contributed"
 }
 
+# --- SUBMISSION REVIEW VIEW ---
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
     if st.button("Save to Google Sheets", type="primary"):
         existing_data = conn.read(worksheet="Sheet1", ttl=5)
         conn.update(worksheet="Sheet1", data=pd.concat([existing_data, pd.DataFrame([flat_log])], ignore_index=True))
         st.success("✅ Setup and Kinematics successfully logged!")
+    
+    # Optional Administrative Submission Review
+    if st.checkbox("Show Submission Review View (Admin Only)"):
+        all_logs = conn.read(worksheet="Sheet1", ttl=5)
+        st.write("Recent User Contributed Kinematics:")
+        st.dataframe(all_logs[all_logs['Submission_Type'] == 'User_Contributed'].tail(10))
 except Exception as e:
     st.error(f"❌ Cloud Connection Inactive: {e}.")
 
 st.markdown("---")
 st.subheader("Capability Notice")
-st.info("""**Engineering Disclaimer** This calculator provides a theoretical baseline. Actual requirements may deviate due to damper valving, system friction, and dynamic riding loads. Data is for estimation; physical sag measurement is mandatory.""")
+st.info("Engineering Disclaimer: Data is for estimation; physical sag measurement is mandatory.")
