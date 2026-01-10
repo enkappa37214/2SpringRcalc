@@ -18,6 +18,7 @@ def reset_form():
 if 'category_select' not in st.session_state:
     st.session_state.category_select = "Enduro"
 
+# --- Constants ---
 LB_TO_KG, KG_TO_LB = 0.453592, 2.20462
 IN_TO_MM, MM_TO_IN = 25.4, 1/25.4
 STONE_TO_KG = 6.35029
@@ -199,11 +200,10 @@ with col_c2:
     st.markdown("### Rear Bias (%)")
     final_bias_calc = st.slider("Rear Bias (%)", 55, 75, key="rear_bias_slider", label_visibility="collapsed")
     
-    # VISUAL TEST OF BIAS
     total_system_kg = rider_kg + gear_kg + bike_kg
     rear_kg_val = total_system_kg * (final_bias_calc/100)
     front_kg_val = total_system_kg - rear_kg_val
-    st.info(f"Weight Distribution: Front **{front_kg_val:.1f}kg** | Rear **{rear_kg_val:.1f}kg**")
+    st.info(f"Weight Distribution Test: Front **{front_kg_val:.1f}kg** | Rear **{rear_kg_val:.1f}kg**")
     
     skill_suggestion = SKILL_MODIFIERS[skill]["bias"]
     st.caption(f"Category Default: {defaults['bias']}%")
@@ -233,15 +233,7 @@ with col_k2:
     else:
         calc_lr_start, prog_pct = travel_mm / stroke_mm if stroke_mm > 0 else 0, float(defaults["progression"])
 
-if travel_mm > 0:
-    st.subheader("Leverage Ratio Curve")
-    x_travel = np.linspace(0, travel_mm, 50)
-    lr_end = calc_lr_start * (1 - (prog_pct / 100))
-    # APPLIED PARABOLIC CURVE LOGIC
-    y_lr = calc_lr_start + (lr_end - calc_lr_start) * (x_travel / travel_mm)**1.5
-    chart_data = pd.DataFrame({"Travel (mm)": x_travel, "Leverage Ratio": y_lr}).set_index("Travel (mm)")
-    st.line_chart(chart_data)
-    st.caption(f"Start: {calc_lr_start:.2f} | End: {lr_end:.2f} | Progression: {prog_pct:.1f}%")
+# Leverage Ratio Curve removed as requested
 
 # --- SPRING COMPATIBILITY ---
 st.header("4. Spring Compatibility & Selection")
@@ -255,7 +247,7 @@ with st.container():
             st.markdown(f"**{info['status']} {s_type}**: {info['msg']}")
     with col_sel:
         st.subheader("Selection")
-        spring_type = st.selectbox("Select Spring Type", ["Standard Steel (Linear)", "Lightweight Steel/Ti", "Sprindex", "Progressive Coil"])
+        spring_type = st.selectbox("Select Spring Type", ["Standard Steel (Linear)", "Lightweight Steel/Ti (linear)", "Sprindex (20% end progression)", "Progressive Coil"])
 
 # --- SETUP PREFERENCES ---
 st.header("5. Setup Preferences")
@@ -284,8 +276,8 @@ if raw_rate > 0:
 
     st.subheader(f"Spring Recommendation: {spring_type}")
     
-    # SPRINDEX LOGIC WITH OUT-OF-RANGE HANDLING
-    if spring_type == "Sprindex":
+    # SPRINDEX LOGIC
+    if "Sprindex" in spring_type:
         family = "XC/Trail (55mm)" if stroke_mm <= 55 else "Enduro (65mm)" if stroke_mm <= 65 else "DH (75mm)"
         st.markdown(f"**Recommended Model:** {family}")
         found_sprindex = False
@@ -295,23 +287,21 @@ if raw_rate > 0:
                 st.success(f"Perfect Fit: {r_str} lbs/in")
                 found_sprindex = True
         if not found_sprindex:
-            st.warning(f"Note: Your calculated rate ({int(raw_rate)} lbs) is outside standard Sprindex adjustable ranges for a {stroke_mm}mm stroke shock. Consider a Standard Steel spring or verify if a longer Sprindex model fits your frame.")
+            st.warning(f"Calculated rate ({int(raw_rate)} lbs) is outside standard Sprindex ranges for a {stroke_mm}mm stroke shock. Consider a Linear spring or verify if a longer Sprindex model is compatible.")
     
     elif spring_type == "Progressive Coil":
         st.info(f"Recommended Progressive Rate: **{int(raw_rate)} - {int(raw_rate * 1.15)} lbs/in**")
     
-    # ALTERNATIVES TABLE (Always visible for Linear/Ti)
-    if spring_type in ["Standard Steel (Linear)", "Lightweight Steel/Ti"]:
-        st.info(f"Standard Linear Coil: **{int(round(raw_rate/25)*25)} lbs/in**")
-        st.markdown("### Comparison of Alternative Spring Rates")
-        alt_rates = []
-        center_rate = int(round(raw_rate / 25) * 25)
-        for r in [center_rate - 50, center_rate - 25, center_rate, center_rate + 25, center_rate + 50]:
-            if r <= 0: continue
-            r_sag_in = (rear_load_lbs * effective_lr / r)
-            r_sag_pct = (r_sag_in / (stroke_mm * MM_TO_IN)) * 100
-            alt_rates.append({"Rate (lbs)": f"{r} lbs", "Resulting Sag": f"{r_sag_pct:.1f}%", "Feel": "Plush" if r < center_rate else "Supportive" if r > center_rate else "Target"})
-        st.table(alt_rates)
+    # ALTERNATIVES TABLE
+    st.markdown("### Comparison of Alternative Spring Rates")
+    alt_rates = []
+    center_rate = int(round(raw_rate / 25) * 25)
+    for r in [center_rate - 50, center_rate - 25, center_rate, center_rate + 25, center_rate + 50]:
+        if r <= 0: continue
+        r_sag_in = (rear_load_lbs * effective_lr / r)
+        r_sag_pct = (r_sag_in / (stroke_mm * MM_TO_IN)) * 100
+        alt_rates.append({"Rate (lbs)": f"{r} lbs", "Resulting Sag": f"{r_sag_pct:.1f}%", "Feel": "Plush" if r < center_rate else "Supportive" if r > center_rate else "Target"})
+    st.table(alt_rates)
 
     # Fine Tuning Table
     st.subheader("Fine Tuning (Preload)")
@@ -340,6 +330,29 @@ if raw_rate > 0:
         pdf.cell(200, 10, f"Recommended Spring Rate: {int(raw_rate)} lbs/in", ln=True)
         pdf.cell(200, 10, f"Spring Type: {spring_type}", ln=True)
         pdf.cell(200, 10, f"Target Sag: {target_sag}%", ln=True)
+        pdf.ln(5)
+        
+        # ALTERNATIVES IN PDF
+        pdf.set_font("Arial", 'B', 12)
+        pdf.cell(200, 10, "Alternative Spring Rates", ln=True)
+        pdf.set_font("Arial", 'B', 10)
+        pdf.cell(60, 8, "Rate (lbs)", 1); pdf.cell(60, 8, "Sag (%)", 1); pdf.cell(60, 8, "Feel", 1, ln=True)
+        pdf.set_font("Arial", size=10)
+        for r_row in alt_rates:
+            pdf.cell(60, 8, r_row["Rate (lbs)"], 1)
+            pdf.cell(60, 8, r_row["Resulting Sag"], 1)
+            pdf.cell(60, 8, r_row["Feel"], 1, ln=True)
+        
+        pdf.ln(5)
+        pdf.set_font("Arial", 'B', 12)
+        pdf.cell(200, 10, f"Preload Fine Tuning ({final_rate} lbs spring)", ln=True)
+        pdf.set_font("Arial", 'B', 10)
+        pdf.cell(60, 8, "Turns", 1); pdf.cell(60, 8, "Resulting Sag (%)", 1); pdf.cell(60, 8, "Status", 1, ln=True)
+        pdf.set_font("Arial", size=10)
+        for row in preload_data:
+            pdf.cell(60, 8, str(row["Turns"]), 1)
+            pdf.cell(60, 8, row["Sag (%)"], 1)
+            pdf.cell(60, 8, row["Status"], 1, ln=True)
         pdf.ln(10)
         pdf.set_font("Arial", 'I', 9)
         pdf.multi_cell(0, 5, "Engineering Disclaimer: This report provides a theoretical baseline derived from kinematic geometry and static mass properties. Actual spring rate requirements may deviate due to damper valving characteristics, system friction, and dynamic riding loads. Data is for estimation purposes; physical verification via sag measurement is mandatory.")
