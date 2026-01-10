@@ -504,7 +504,7 @@ else:
     st.error("Ensure Stroke and Travel are > 0.")
 
 st.divider()
-# --- LOGGING OUTPUT (CLOUD INTEGRATION) ---
+# --- LOGGING OUTPUT (UPDATED) ---
 st.subheader("Configuration Log")
 st.caption("Show Setup Data (For Export)")
 
@@ -513,6 +513,7 @@ weight_src = "Estimated" if weight_mode == "Estimate" else "Manual Input"
 unsprung_src = "Estimated" if unsprung_mode else "Manual Input"
 
 kinematics_src = "Database" if is_db_bike else "Manual/Generic"
+# Check if user overrode specific kinematic fields in manual mode
 if not is_db_bike:
     if travel_mm != defaults["travel"] or stroke_mm != defaults["stroke"]:
         kinematics_src = "Manual (Customized)"
@@ -554,22 +555,18 @@ with st.expander("View JSON Log", expanded=False):
 st.write("Preview of row to be saved:")
 st.dataframe(pd.DataFrame([flat_log]), hide_index=True)
 
-# 4. Save to Cloud
-conn = st.connection("gsheets", type=GSheetsConnection)
-
-if st.button("Save to Google Sheets", type="primary"):
-    try:
-        # Read existing data (ttl=5 seconds ensures cache is fresh)
+# 4. Save to Cloud (Wrapped in try/except)
+try:
+    conn = st.connection("gsheets", type=GSheetsConnection)
+    if st.button("Save to Google Sheets", type="primary"):
+        # Fresh read to ensure cache sync
         existing_data = conn.read(worksheet="Sheet1", usecols=list(flat_log.keys()), ttl=5)
-        # Create new dataframe
         new_row = pd.DataFrame([flat_log])
-        # Append
         updated_df = pd.concat([existing_data, new_row], ignore_index=True)
-        # Write back
         conn.update(worksheet="Sheet1", data=updated_df)
         st.success("✅ Log successfully written to Cloud!")
-    except Exception as e:
-        st.error(f"❌ Connection Error: {e}. Check your secrets.toml.")
+except Exception as e:
+    st.error(f"❌ Cloud Connection Inactive: {e}. Check Streamlit Secrets.")
 
 # --- CAPABILITY NOTICE (REVERTED) ---
 st.markdown("---")
