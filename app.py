@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import datetime # Added for logging timestamps
 
 # ==========================================================
 # 1. CONFIGURATION & DATA CONSTANTS
@@ -121,7 +122,8 @@ def analyze_spring_compatibility(progression_pct, has_hbo):
         analysis["Linear"]["msg"] = "High risk of harsh bottom-outs unless shock has strong HBO."
         analysis["Progressive"]["status"] = "✅ Optimal"
         analysis["Progressive"]["msg"] = "Essential to compensate for the frame's lack of ramp-up."
-    return analysis
+        return analysis
+    return analysis # Added safe return for edge cases
 
 # --- CALLBACKS ---
 def update_bias_from_category():
@@ -520,6 +522,7 @@ if not is_db_bike:
 bias_offset = final_bias_calc - cat_def_bias
 bias_status = "Default" if bias_offset == 0 else f"Custom ({bias_offset:+d}%)"
 
+# 1. Create the Nested Log (Visual reference for user)
 log_payload = {
     "User_Setup": {
         "Chassis": chassis_type,
@@ -537,7 +540,23 @@ log_payload = {
         "Bias_Setting": bias_status
     }
 }
-st.json(log_payload, expanded=False)
+
+# 2. FLATTEN DATA
+# Merges sub-dictionaries into a single layer for Google Sheets
+timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+flat_log = {
+    "Timestamp": timestamp,
+    **log_payload["User_Setup"],
+    **log_payload["Data_Origins"]
+}
+
+# 3. Display
+with st.expander("View JSON Log", expanded=False):
+    st.json(log_payload)
+
+st.write("Preview of row to be saved:")
+st.dataframe(pd.DataFrame([flat_log]), hide_index=True)
 
 # --- CAPABILITY NOTICE (REVERTED) ---
 st.markdown("---")
