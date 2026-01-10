@@ -18,7 +18,6 @@ def reset_form():
 if 'category_select' not in st.session_state:
     st.session_state.category_select = "Enduro"
 
-# --- Constants ---
 LB_TO_KG, KG_TO_LB = 0.453592, 2.20462
 IN_TO_MM, MM_TO_IN = 25.4, 1/25.4
 STONE_TO_KG = 6.35029
@@ -229,9 +228,8 @@ with st.container():
         spring_list = ["Standard Steel (Linear)", "Lightweight Steel/Ti (linear)", "Sprindex (20% end progression)", "Progressive Spring"]
         spring_type_sel = st.selectbox("Select Spring Type", spring_list)
         
-        # Progression Disclaimers
         if "Progressive" in spring_type_sel and "Caution Avoid" in analysis["Progressive"]["status"]:
-            st.warning("⚠️ Disclaimer: Using a progressive spring on a frame with >25% progression may result in an unusable 'Wall Effect' at travel end.")
+            st.warning("⚠️ Disclaimer: Using a progressive spring on a frame with >25% progression may result in an unusable Wall Effect at travel end.")
         elif "Linear" in spring_type_sel and "Caution" in analysis["Linear"]["status"]:
             st.warning("⚠️ Disclaimer: Using a linear spring on a frame with low progression (<12%) significantly increases bottom-out risk.")
 
@@ -260,6 +258,8 @@ if raw_rate > 0:
 
     final_rate_for_tuning = int(round(raw_rate / 25) * 25)
     alt_rates = []
+    sprindex_model_info = "N/A"
+    gap_choice_log = "N/A"
 
     st.subheader(f"Recommended Spring Model")
     
@@ -271,7 +271,7 @@ if raw_rate > 0:
             low, high = map(int, r_str.split("-"))
             if low <= raw_rate <= high:
                 st.success(f"Perfect Fit: {r_str} lbs/in")
-                st.markdown(f"**Sprindex Model:** {family}")
+                sprindex_model_info = f"{family} ({r_str} lbs)"
                 final_rate_for_tuning = int(round(raw_rate / 5) * 5)
                 found_match = True
                 break
@@ -285,9 +285,12 @@ if raw_rate > 0:
             upper_r, high_limit = gap_neighbors[1]
             st.warning(f"Calculated rate ({int(raw_rate)} lbs) falls in a gap.")
             gap_choice = st.radio("Choose option:", [f"Option A: {lower_r} (Plush)", f"Option B: {upper_r} (Supportive)"])
+            gap_choice_log = gap_choice
             chosen_range = lower_r if "Option A" in gap_choice else upper_r
             final_rate_for_tuning = low_limit if "Option A" in gap_choice else high_limit
-            st.markdown(f"**Sprindex Model:** {family} ({chosen_range} lbs)")
+            sprindex_model_info = f"{family} ({chosen_range} lbs)"
+        
+        st.markdown(f"**Selected Hardware:** {sprindex_model_info}")
 
         st.markdown("### Comparison of Adjustable Settings")
         step = 5 if family != "DH (75mm)" else 10
@@ -329,25 +332,45 @@ if raw_rate > 0:
         pdf.add_page()
         pdf.set_font("Arial", 'B', 16); pdf.cell(200, 10, "MTB Spring Rate Calculation Report", ln=True, align='C')
         pdf.set_font("Arial", size=11); pdf.ln(10)
-        pdf.cell(200, 8, f"Date: {datetime.datetime.now().strftime('%Y-%m-%d')}", ln=True)
+        
+        pdf.set_font("Arial", 'B', 12); pdf.cell(200, 10, "1. Calculation Summary", ln=True)
+        pdf.set_font("Arial", size=10)
         pdf.cell(200, 8, f"Bike: {bike_model_log}", ln=True)
-        pdf.cell(200, 8, f"Rider Weight: {rider_kg:.1f} kg", ln=True); pdf.ln(5)
-        pdf.set_font("Arial", 'B', 14); pdf.cell(200, 10, "Calculation Results", ln=True)
-        pdf.set_font("Arial", size=12); pdf.cell(200, 10, f"Recommended Spring Rate: {int(raw_rate)} lbs/in", ln=True)
-        pdf.cell(200, 10, f"Selected Spring Type: {spring_type_sel}", ln=True)
-        pdf.cell(200, 10, f"Target Sag: {target_sag}%", ln=True); pdf.ln(5)
-        pdf.set_font("Arial", 'B', 12); pdf.cell(200, 10, "Alternative Rates/Settings", ln=True)
+        pdf.cell(200, 8, f"Total System Weight: {total_system_kg:.1f} kg", ln=True)
+        pdf.cell(200, 8, f"Mathematical Baseline: {int(raw_rate)} lbs/in", ln=True)
+        
+        pdf.ln(5)
+        pdf.set_font("Arial", 'B', 12); pdf.cell(200, 10, "2. Selected Hardware & Logic", ln=True)
+        pdf.set_font("Arial", size=10)
+        pdf.cell(200, 8, f"Spring Type: {spring_type_sel}", ln=True)
+        if "Sprindex" in spring_type_sel:
+            pdf.cell(200, 8, f"Chosen Hardware: {sprindex_model_info}", ln=True)
+            pdf.cell(200, 8, f"Gap Option Logic: {gap_choice_log}", ln=True)
+        else:
+            pdf.cell(200, 8, f"Required Size: {spring_size_mm}mm Stroke", ln=True)
+        
+        pdf.ln(5)
+        pdf.set_font("Arial", 'B', 12); pdf.cell(200, 10, "3. Adjustable Settings Matrix", ln=True)
         pdf.set_font("Arial", 'B', 10); pdf.cell(60, 8, "Rate (lbs)", 1); pdf.cell(60, 8, "Sag (%)", 1); pdf.cell(60, 8, "Feel", 1, ln=True)
         pdf.set_font("Arial", size=10)
         for r_row in alt_rates:
             pdf.cell(60, 8, r_row["Rate (lbs)"], 1); pdf.cell(60, 8, r_row["Resulting Sag"], 1); pdf.cell(60, 8, r_row["Feel"], 1, ln=True)
-        pdf.ln(5); pdf.set_font("Arial", 'B', 12); pdf.cell(200, 10, f"Preload Fine Tuning ({final_rate_for_tuning} lbs)", ln=True)
+        
+        pdf.ln(5)
+        pdf.set_font("Arial", 'B', 12); pdf.cell(200, 10, f"4. Mechanical Preload Guide ({final_rate_for_tuning} lbs)", ln=True)
         pdf.set_font("Arial", 'B', 10); pdf.cell(60, 8, "Turns", 1); pdf.cell(60, 8, "Resulting Sag (%)", 1); pdf.cell(60, 8, "Status", 1, ln=True)
         pdf.set_font("Arial", size=10)
         for row in preload_data:
             pdf.cell(60, 8, str(row["Turns"]), 1); pdf.cell(60, 8, row["Sag (%)"], 1); pdf.cell(60, 8, row["Status"], 1, ln=True)
+        
         pdf.ln(10); pdf.set_font("Arial", 'I', 9)
-        pdf.multi_cell(0, 5, "Engineering Disclaimer: This calculator provides a theoretical baseline derived from kinematic geometry and static mass properties. Actual requirements may deviate due to damper valving, friction, and dynamic riding loads. Physical verification is mandatory.")
+        disclaimer_text = (
+            "Engineering Disclaimer: This calculator provides a theoretical baseline derived from kinematic geometry and static mass properties. "
+            "Actual requirements may deviate due to damper valving, system friction, and dynamic riding loads. "
+            "Spring Internal Diameter (ID): Verify hardware compatibility. Ensure performance adapters are used to prevent mechanical binding. "
+            "Physical verification via sag measurement is mandatory."
+        )
+        pdf.multi_cell(0, 5, disclaimer_text)
         return pdf.output(dest="S").encode("latin-1")
     st.download_button(label="Export Results to PDF", data=generate_pdf(), file_name=f"MTB_Spring_Report_{datetime.datetime.now().strftime('%Y%m%d')}.pdf", mime="application/pdf")
 
@@ -375,7 +398,6 @@ try:
 except Exception as e: st.error(f"Cloud Connection Inactive: {e}.")
 
 st.markdown("---"); st.subheader("Capability Notice")
-
 st.info(
     """
     Engineering Disclaimer: This calculator provides a theoretical baseline derived from kinematic geometry and static mass properties. 
