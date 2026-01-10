@@ -405,14 +405,16 @@ flat_log = {
     "Timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     "Chassis": chassis_type,
     "Bike_Model": bike_model_log,
-    "Frame_Size": f_size,
+    "Frame_Size": f_size, # Guaranteed by UI logic above
     "Rider_Weight_Kg": round(rider_kg, 1),
     "Bike_Weight_Kg": round(bike_kg, 1),
-    "Sprung_Mass_Kg": round(rider_kg + gear_kg + bike_kg - unsprung_kg, 1),
+    "Sprung_Mass_Kg": round(total_system_kg - unsprung_kg, 1),
     "Unsprung_Mass_Kg": round(unsprung_kg, 1),
     "Target_Sag_Pct": target_sag,
     "Calculated_Spring_Rate": int(raw_rate),
-    "Kinematics_Source": "Database" if is_db_bike else "User Manual",
+    "Kinematics_Source": "Verified DB" if selected_bike_data is not None else "User Contributed",
+    "Bike_Weight_Source": bike_weight_source, # Guaranteed by if/else block
+    "Unsprung_Mass_Source": unsprung_source,   # Guaranteed by if/else block
     "Bias_Setting": f"{final_bias_calc}%",
     "Travel_mm": round(travel_mm, 1),
     "Stroke_mm": round(stroke_mm, 1),
