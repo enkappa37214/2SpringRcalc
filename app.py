@@ -79,15 +79,15 @@ def estimate_unsprung(wheel_tier, frame_mat, has_inserts, is_ebike):
 def analyze_spring_compatibility(progression_pct, has_hbo):
     analysis = {"Linear": {"status": "", "msg": ""}, "Progressive": {"status": "", "msg": ""}}
     if progression_pct > 25:
-        analysis["Linear"]["status"] = "OK Optimal"; analysis["Linear"]["msg"] = "Matches frame kinematics perfectly."
-        analysis["Progressive"]["status"] = "Caution Avoid"; analysis["Progressive"]["msg"] = "Risk of harsh Wall Effect at bottom-out."
+        analysis["Linear"]["status"] = "OK Optimal"; analysis["Linear"]["msg"] = "Matches frame kinematics."
+        analysis["Progressive"]["status"] = "Caution Avoid"; analysis["Progressive"]["msg"] = "Risk of harsh Wall Effect."
     elif 12 <= progression_pct <= 25:
-        analysis["Linear"]["status"] = "OK Compatible"; analysis["Linear"]["msg"] = "Use for a plush coil feel."
-        analysis["Progressive"]["status"] = "OK Compatible"; analysis["Progressive"]["msg"] = "Use for more pop and bottom-out resistance."
+        analysis["Linear"]["status"] = "OK Compatible"; analysis["Linear"]["msg"] = "Plush feel."
+        analysis["Progressive"]["status"] = "OK Compatible"; analysis["Progressive"]["msg"] = "More pop."
         if has_hbo: analysis["Linear"]["msg"] += " (HBO handles bottom-out)."
     else:
-        analysis["Linear"]["status"] = "Caution"; analysis["Linear"]["msg"] = "High risk of bottom-out without strong HBO."
-        analysis["Progressive"]["status"] = "OK Optimal"; analysis["Progressive"]["msg"] = "Essential to compensate for lack of ramp-up."
+        analysis["Linear"]["status"] = "Caution"; analysis["Linear"]["msg"] = "Risk of bottom-out."
+        analysis["Progressive"]["status"] = "OK Optimal"; analysis["Progressive"]["msg"] = "Compensates for low ramp-up."
     return analysis
 
 def update_bias_from_category():
@@ -171,7 +171,7 @@ if manual_entry_mode:
     with col_new3: new_name = st.text_input("Model", placeholder="e.g. NOMAD")
     bike_model_log = f"{new_year} {new_brand.upper()} {new_name.upper()}".strip()
     if not bike_db.empty and bike_model_log in bike_db['Model'].values:
-        st.warning(f"Duplicate Detected: '{bike_model_log}' already exists in the database.")
+        st.warning(f"Duplicate Detected: '{bike_model_log}' already exists.")
 
 category = st.selectbox("Category", list(CATEGORY_DATA.keys()), format_func=lambda x: f"{x} ({CATEGORY_DATA[x]['desc']})", key='category_select', on_change=update_bias_from_category)
 defaults = CATEGORY_DATA[category]
@@ -186,7 +186,6 @@ with col_c1:
     else:
         frame_size_log = st.selectbox("Frame Size", list(SIZE_WEIGHT_MODS.keys()), index=2)
         bike_kg = st.number_input("Bike Weight (kg)", 7.0, 36.0, defaults["bike_mass_def_kg"] + (EBIKE_WEIGHT_PENALTY_KG if is_ebike else 0.0), 0.1)
-    
     unsprung_kg = st.number_input("Unsprung (kg)", 0.0, 25.0, 4.27 + (2.0 if is_ebike else 0.0), 0.01)
 
 with col_c2:
@@ -194,16 +193,8 @@ with col_c2:
     st.markdown("### Rear Bias (%)")
     final_bias_calc = st.slider("Rear Bias (%)", 55, 75, key="rear_bias_slider", label_visibility="collapsed")
     total_system_kg = rider_kg + gear_kg + bike_kg
-    rear_kg_val = total_system_kg * (final_bias_calc/100)
-    front_kg_val = total_system_kg - rear_kg_val
-    st.info(f"Weight Distribution Test: Front **{front_kg_val:.1f}kg** | Rear **{rear_kg_val:.1f}kg**")
-    skill_suggestion = SKILL_MODIFIERS[skill]["bias"]
-    st.caption(f"Category Default: {defaults['bias']}%")
-    if skill_suggestion != 0:
-        advice_sign = "+" if skill_suggestion > 0 else ""
-        st.info(f"Skill Modifier: {advice_sign}{skill_suggestion}% bias recommended.")
-    else:
-        st.info("Skill Modifier: 0% bias adjustment recommended.")
+    rear_val_kg = total_system_kg * (final_bias_calc/100)
+    st.info(f"Weight Distribution Test: Front **{total_system_kg - rear_val_kg:.1f}kg** | Rear **{rear_val_kg:.1f}kg**")
 
 # --- KINEMATICS ---
 st.header("3. Shock & Kinematics")
@@ -229,23 +220,36 @@ with st.container():
     col_comp, col_sel = st.columns([0.6, 0.4])
     with col_comp:
         st.subheader("Analysis")
-        has_hbo = st.checkbox("Shock has HBO (Hydraulic Bottom Out)?")
+        has_hbo = st.checkbox("Shock has HBO?")
         analysis = analyze_spring_compatibility(progression_pct=prog_pct, has_hbo=has_hbo)
         for s_type, info in analysis.items():
             st.markdown(f"**{info['status']} {s_type}**: {info['msg']}")
     with col_sel:
         st.subheader("Selection")
-        spring_type_sel = st.selectbox("Select Spring Type", ["Standard Steel (Linear)", "Lightweight Steel/Ti (linear)", "Sprindex (20% end progression)", "Progressive Coil"])
+        spring_list = ["Standard Steel (Linear)", "Lightweight Steel/Ti (linear)", "Sprindex (20% end progression)", "Progressive Spring"]
+        spring_type_sel = st.selectbox("Select Spring Type", spring_list)
+        
+        # Progression Disclaimers
+        if "Progressive" in spring_type_sel and "Caution Avoid" in analysis["Progressive"]["status"]:
+            st.warning("⚠️ Disclaimer: Using a progressive spring on a frame with >25% progression may result in an unusable 'Wall Effect' at travel end.")
+        elif "Linear" in spring_type_sel and "Caution" in analysis["Linear"]["status"]:
+            st.warning("⚠️ Disclaimer: Using a linear spring on a frame with low progression (<12%) significantly increases bottom-out risk.")
+        
+        # Internal Diameter Disclaimer
+        st.info("⚠️ Hardware Note: Verify Spring Internal Diameter (ID). Common standards include 35mm (Ohlins, Cane Creek) and 38mm (Fox, Marzocchi). Ensure compatible performance adapters are used to prevent binding.")
 
-# --- SETUP PREFERENCES ---
 st.header("5. Setup Preferences")
 target_sag = st.slider("Target Sag (%)", 20.0, 40.0, float(defaults["base_sag"]), 0.5)
+
+# ==========================================================
+# 4. CALCULATIONS
+# ==========================================================
 total_drop = (calc_lr_start - (calc_lr_start * (1 - (prog_pct/100))))
 effective_lr = calc_lr_start - (total_drop * (target_sag / 100)) if adv_kinematics else travel_mm / stroke_mm
 eff_rider_kg = rider_kg + (gear_kg * COUPLING_COEFFS[category])
 rear_load_lbs = ((eff_rider_kg + bike_kg) * (final_bias_calc / 100) - unsprung_kg) * KG_TO_LB
 raw_rate = (rear_load_lbs * effective_lr) / (stroke_mm * (target_sag / 100) * MM_TO_IN) if stroke_mm > 0 else 0
-if spring_type_sel == "Progressive Coil": raw_rate *= PROGRESSIVE_CORRECTION_FACTOR
+if spring_type_sel == "Progressive Spring": raw_rate *= PROGRESSIVE_CORRECTION_FACTOR
 
 # ==========================================================
 # 5. RESULTS
@@ -260,8 +264,7 @@ if raw_rate > 0:
     final_rate_for_tuning = int(round(raw_rate / 25) * 25)
     alt_rates = []
 
-    # --- SPRING RECOMMENDATION LOGIC ---
-    st.subheader(f"Recommended Spring Model") # Header updated
+    st.subheader(f"Recommended Spring Model")
     
     if "Sprindex" in spring_type_sel:
         family = "XC/Trail (55mm)" if stroke_mm <= 55 else "Enduro (65mm)" if stroke_mm <= 65 else "DH (75mm)"
@@ -298,8 +301,11 @@ if raw_rate > 0:
             alt_rates.append({"Rate (lbs)": f"{r} lbs", "Resulting Sag": f"{r_sag_pct:.1f}%", "Feel": "Plush" if r < center_sprindex else "Supportive" if r > center_sprindex else "Target"})
     
     else:
-        st.markdown(f"**Spring Type:** {spring_type_sel}") # Header updated
-        if spring_type_sel == "Progressive Coil":
+        spring_size_mm = int(stroke_mm + 5) if stroke_mm % 5 == 0 else int(stroke_mm + (5 - (stroke_mm % 5)))
+        st.markdown(f"**Selected Spring Type:** {spring_type_sel}")
+        st.markdown(f"**Required Spring Size:** {spring_size_mm}mm Stroke")
+        
+        if spring_type_sel == "Progressive Spring":
             st.info(f"Recommended Range: **{int(raw_rate)} - {int(raw_rate * 1.15)} lbs/in**")
         else:
             st.info(f"Standard Rate: **{final_rate_for_tuning} lbs/in**")
@@ -313,8 +319,7 @@ if raw_rate > 0:
     
     st.table(alt_rates)
 
-    # --- FINE TUNING ---
-    st.subheader(f"Fine Tuning (Preload - {final_rate_for_tuning} lbs spring)") # Header updated
+    st.subheader(f"Fine Tuning (Preload - {final_rate_for_tuning} lbs spring)")
     preload_data = []
     for turns in [0.5, 1.0, 1.5, 2.0, 2.5, 3.0]:
         sag_in = (rear_load_lbs * effective_lr / final_rate_for_tuning) - (turns * 1.0 * MM_TO_IN)
@@ -332,20 +337,20 @@ if raw_rate > 0:
         pdf.cell(200, 8, f"Rider Weight: {rider_kg:.1f} kg", ln=True); pdf.ln(5)
         pdf.set_font("Arial", 'B', 14); pdf.cell(200, 10, "Calculation Results", ln=True)
         pdf.set_font("Arial", size=12); pdf.cell(200, 10, f"Recommended Spring Rate: {int(raw_rate)} lbs/in", ln=True)
-        pdf.cell(200, 10, f"Spring Type: {spring_type_sel}", ln=True)
+        pdf.cell(200, 10, f"Selected Spring Type: {spring_type_sel}", ln=True)
         pdf.cell(200, 10, f"Target Sag: {target_sag}%", ln=True); pdf.ln(5)
         pdf.set_font("Arial", 'B', 12); pdf.cell(200, 10, "Alternative Rates/Settings", ln=True)
         pdf.set_font("Arial", 'B', 10); pdf.cell(60, 8, "Rate (lbs)", 1); pdf.cell(60, 8, "Sag (%)", 1); pdf.cell(60, 8, "Feel", 1, ln=True)
         pdf.set_font("Arial", size=10)
         for r_row in alt_rates:
             pdf.cell(60, 8, r_row["Rate (lbs)"], 1); pdf.cell(60, 8, r_row["Resulting Sag"], 1); pdf.cell(60, 8, r_row["Feel"], 1, ln=True)
-        pdf.ln(5); pdf.set_font("Arial", 'B', 12); pdf.cell(200, 10, "Preload Fine Tuning", ln=True)
+        pdf.ln(5); pdf.set_font("Arial", 'B', 12); pdf.cell(200, 10, f"Preload Fine Tuning ({final_rate_for_tuning} lbs)", ln=True)
         pdf.set_font("Arial", 'B', 10); pdf.cell(60, 8, "Turns", 1); pdf.cell(60, 8, "Resulting Sag (%)", 1); pdf.cell(60, 8, "Status", 1, ln=True)
         pdf.set_font("Arial", size=10)
         for row in preload_data:
             pdf.cell(60, 8, str(row["Turns"]), 1); pdf.cell(60, 8, row["Sag (%)"], 1); pdf.cell(60, 8, row["Status"], 1, ln=True)
         pdf.ln(10); pdf.set_font("Arial", 'I', 9)
-        pdf.multi_cell(0, 5, "Engineering Disclaimer: This calculator provides a theoretical baseline derived from kinematic geometry and static mass properties. Actual spring rate requirements may deviate due to damper valving characteristics, system friction, and dynamic riding loads. Data is for estimation purposes; physical verification via sag measurement is mandatory.")
+        pdf.multi_cell(0, 5, "Engineering Disclaimer: This calculator provides a theoretical baseline derived from kinematic geometry and static mass properties. Actual requirements may deviate due to damper valving, friction, and dynamic riding loads. Physical verification is mandatory.")
         return pdf.output(dest="S").encode("latin-1")
     st.download_button(label="Export Results to PDF", data=generate_pdf(), file_name=f"MTB_Spring_Report_{datetime.datetime.now().strftime('%Y%m%d')}.pdf", mime="application/pdf")
 
@@ -370,22 +375,17 @@ try:
         existing_data = conn.read(worksheet="Sheet1", ttl=5)
         conn.update(worksheet="Sheet1", data=pd.concat([existing_data, pd.DataFrame([flat_log])], ignore_index=True))
         st.success("Setup successfully logged!")
-    if st.checkbox("Show Submission Review View (Admin Only)"):
-        all_logs = conn.read(worksheet="Sheet1", ttl=5)
-        st.dataframe(all_logs[all_logs['Submission_Type'] == 'User_Contributed'].tail(10))
 except Exception as e: st.error(f"Cloud Connection Inactive: {e}.")
 
 st.markdown("---"); st.subheader("Capability Notice")
 st.info(
     """
-    **Engineering Disclaimer**
-    
-    This calculator provides a theoretical baseline derived from kinematic geometry and static mass properties. 
+    Engineering Disclaimer: This calculator provides a theoretical baseline derived from kinematic geometry and static mass properties. 
     Actual spring rate requirements may deviate due to:
     * Damper valving characteristics (compression tune).
     * System friction (seals, bushings, bearings).
     * Dynamic riding loads and terrain severity.
     
-    Data is provided for estimation purposes; physical verification via sag measurement is mandatory.
+    Data is for estimation purposes; physical verification via sag measurement is mandatory.
     """
 )
