@@ -261,7 +261,7 @@ if raw_rate > 0:
     alt_rates = []
 
     # --- SPRING RECOMMENDATION LOGIC ---
-    st.subheader(f"Recommended Coil Model")
+    st.subheader(f"Recommended Spring Model") # Header updated
     
     if "Sprindex" in spring_type_sel:
         family = "XC/Trail (55mm)" if stroke_mm <= 55 else "Enduro (65mm)" if stroke_mm <= 65 else "DH (75mm)"
@@ -285,12 +285,10 @@ if raw_rate > 0:
             upper_r, high_limit = gap_neighbors[1]
             st.warning(f"Calculated rate ({int(raw_rate)} lbs) falls in a gap.")
             gap_choice = st.radio("Choose option:", [f"Option A: {lower_r} (Plush)", f"Option B: {upper_r} (Supportive)"])
-            # Sync selection to model display and tuning rate
             chosen_range = lower_r if "Option A" in gap_choice else upper_r
             final_rate_for_tuning = low_limit if "Option A" in gap_choice else high_limit
             st.markdown(f"**Sprindex Model:** {family} ({chosen_range} lbs)")
 
-        # Adjustable Settings centered on selection
         st.markdown("### Comparison of Adjustable Settings")
         step = 5 if family != "DH (75mm)" else 10
         center_sprindex = int(round(final_rate_for_tuning / step) * step)
@@ -300,7 +298,7 @@ if raw_rate > 0:
             alt_rates.append({"Rate (lbs)": f"{r} lbs", "Resulting Sag": f"{r_sag_pct:.1f}%", "Feel": "Plush" if r < center_sprindex else "Supportive" if r > center_sprindex else "Target"})
     
     else:
-        st.markdown(f"**Coil Type:** {spring_type_sel}")
+        st.markdown(f"**Spring Type:** {spring_type_sel}") # Header updated
         if spring_type_sel == "Progressive Coil":
             st.info(f"Recommended Range: **{int(raw_rate)} - {int(raw_rate * 1.15)} lbs/in**")
         else:
@@ -315,8 +313,8 @@ if raw_rate > 0:
     
     st.table(alt_rates)
 
-    # --- FINE TUNING (Sync with chosen model rate) ---
-    st.subheader(f"Fine Tuning (Preload - {final_rate_for_tuning} lbs spring)")
+    # --- FINE TUNING ---
+    st.subheader(f"Fine Tuning (Preload - {final_rate_for_tuning} lbs spring)") # Header updated
     preload_data = []
     for turns in [0.5, 1.0, 1.5, 2.0, 2.5, 3.0]:
         sag_in = (rear_load_lbs * effective_lr / final_rate_for_tuning) - (turns * 1.0 * MM_TO_IN)
@@ -341,13 +339,13 @@ if raw_rate > 0:
         pdf.set_font("Arial", size=10)
         for r_row in alt_rates:
             pdf.cell(60, 8, r_row["Rate (lbs)"], 1); pdf.cell(60, 8, r_row["Resulting Sag"], 1); pdf.cell(60, 8, r_row["Feel"], 1, ln=True)
-        pdf.ln(5); pdf.set_font("Arial", 'B', 12); pdf.cell(200, 10, f"Preload Fine Tuning ({final_rate_for_tuning} lbs)", ln=True)
+        pdf.ln(5); pdf.set_font("Arial", 'B', 12); pdf.cell(200, 10, "Preload Fine Tuning", ln=True)
         pdf.set_font("Arial", 'B', 10); pdf.cell(60, 8, "Turns", 1); pdf.cell(60, 8, "Resulting Sag (%)", 1); pdf.cell(60, 8, "Status", 1, ln=True)
         pdf.set_font("Arial", size=10)
         for row in preload_data:
             pdf.cell(60, 8, str(row["Turns"]), 1); pdf.cell(60, 8, row["Sag (%)"], 1); pdf.cell(60, 8, row["Status"], 1, ln=True)
         pdf.ln(10); pdf.set_font("Arial", 'I', 9)
-        pdf.multi_cell(0, 5, "Engineering Disclaimer: This report provides a theoretical baseline derived from kinematic geometry and static mass properties. Actual requirements may deviate due to damper valving, friction, and riding loads. Sag measurement is mandatory.")
+        pdf.multi_cell(0, 5, "Engineering Disclaimer: This calculator provides a theoretical baseline derived from kinematic geometry and static mass properties. Actual spring rate requirements may deviate due to damper valving characteristics, system friction, and dynamic riding loads. Data is for estimation purposes; physical verification via sag measurement is mandatory.")
         return pdf.output(dest="S").encode("latin-1")
     st.download_button(label="Export Results to PDF", data=generate_pdf(), file_name=f"MTB_Spring_Report_{datetime.datetime.now().strftime('%Y%m%d')}.pdf", mime="application/pdf")
 
@@ -378,4 +376,16 @@ try:
 except Exception as e: st.error(f"Cloud Connection Inactive: {e}.")
 
 st.markdown("---"); st.subheader("Capability Notice")
-st.info("Engineering Disclaimer: Data is for estimation; physical verification via sag measurement is mandatory.")
+st.info(
+    """
+    **Engineering Disclaimer**
+    
+    This calculator provides a theoretical baseline derived from kinematic geometry and static mass properties. 
+    Actual spring rate requirements may deviate due to:
+    * Damper valving characteristics (compression tune).
+    * System friction (seals, bushings, bearings).
+    * Dynamic riding loads and terrain severity.
+    
+    Data is provided for estimation purposes; physical verification via sag measurement is mandatory.
+    """
+)
