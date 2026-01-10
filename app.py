@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
-import datetime # Added for logging timestamps
+import datetime
+from streamlit_gsheets import GSheetsConnection
 
 # ==========================================================
 # 1. CONFIGURATION & DATA CONSTANTS
@@ -122,8 +123,7 @@ def analyze_spring_compatibility(progression_pct, has_hbo):
         analysis["Linear"]["msg"] = "High risk of harsh bottom-outs unless shock has strong HBO."
         analysis["Progressive"]["status"] = "✅ Optimal"
         analysis["Progressive"]["msg"] = "Essential to compensate for the frame's lack of ramp-up."
-        return analysis
-    return analysis # Added safe return for edge cases
+    return analysis
 
 # --- CALLBACKS ---
 def update_bias_from_category():
@@ -253,7 +253,6 @@ with col_c1:
         bike_kg = est_w
         frame_size_log = size
     else:
-        # UPDATED: Standardised Frame Size input
         frame_size_in = st.selectbox("Frame Size", list(SIZE_WEIGHT_MODS.keys()), index=2)
         if frame_size_in: frame_size_log = frame_size_in
         is_lbs = unit_mass == "North America (lbs)"
@@ -505,7 +504,7 @@ else:
     st.error("Ensure Stroke and Travel are > 0.")
 
 st.divider()
-# --- LOGGING OUTPUT (UPDATED) ---
+# --- LOGGING OUTPUT (CLOUD INTEGRATION) ---
 st.subheader("Configuration Log")
 st.caption("Show Setup Data (For Export)")
 
@@ -514,7 +513,6 @@ weight_src = "Estimated" if weight_mode == "Estimate" else "Manual Input"
 unsprung_src = "Estimated" if unsprung_mode else "Manual Input"
 
 kinematics_src = "Database" if is_db_bike else "Manual/Generic"
-# Check if user overrode specific kinematic fields in manual mode
 if not is_db_bike:
     if travel_mm != defaults["travel"] or stroke_mm != defaults["stroke"]:
         kinematics_src = "Manual (Customized)"
@@ -522,7 +520,7 @@ if not is_db_bike:
 bias_offset = final_bias_calc - cat_def_bias
 bias_status = "Default" if bias_offset == 0 else f"Custom ({bias_offset:+d}%)"
 
-# 1. Create the Nested Log (Visual reference for user)
+# 1. Create Nested Log
 log_payload = {
     "User_Setup": {
         "Chassis": chassis_type,
@@ -541,22 +539,37 @@ log_payload = {
     }
 }
 
-# 2. FLATTEN DATA
-# Merges sub-dictionaries into a single layer for Google Sheets
+# 2. Flatten Data
 timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
 flat_log = {
     "Timestamp": timestamp,
     **log_payload["User_Setup"],
     **log_payload["Data_Origins"]
 }
 
-# 3. Display
+# 3. Display Log
 with st.expander("View JSON Log", expanded=False):
     st.json(log_payload)
 
 st.write("Preview of row to be saved:")
 st.dataframe(pd.DataFrame([flat_log]), hide_index=True)
+
+# 4. Save to Cloud
+conn = st.connection("gsheets", type=GSheetsConnection)
+
+if st.button("Save to Google Sheets", type="primary"):
+    try:
+        # Read existing data (ttl=5 seconds ensures cache is fresh)
+        existing_data = conn.read(worksheet="Sheet1", usecols=list(flat_log.keys()), ttl=5)
+        # Create new dataframe
+        new_row = pd.DataFrame([flat_log])
+        # Append
+        updated_df = pd.concat([existing_data, new_row], ignore_index=True)
+        # Write back
+        conn.update(worksheet="Sheet1", data=updated_df)
+        st.success("✅ Log successfully written to Cloud!")
+    except Exception as e:
+        st.error(f"❌ Connection Error: {e}. Check your secrets.toml.")
 
 # --- CAPABILITY NOTICE (REVERTED) ---
 st.markdown("---")
