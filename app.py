@@ -18,6 +18,7 @@ def reset_form():
 if 'category_select' not in st.session_state:
     st.session_state.category_select = "Enduro"
 
+# --- Constants ---
 LB_TO_KG, KG_TO_LB = 0.453592, 2.20462
 IN_TO_MM, MM_TO_IN = 25.4, 1/25.4
 STONE_TO_KG = 6.35029
@@ -81,12 +82,12 @@ def analyze_spring_compatibility(progression_pct, has_hbo):
         analysis["Linear"]["status"] = "OK Optimal"; analysis["Linear"]["msg"] = "Matches frame kinematics."
         analysis["Progressive"]["status"] = "Caution Avoid"; analysis["Progressive"]["msg"] = "Risk of harsh Wall Effect."
     elif 12 <= progression_pct <= 25:
-        analysis["Linear"]["status"] = "OK Compatible"; analysis["Linear"]["msg"] = "Plush feel."
-        analysis["Progressive"]["status"] = "OK Compatible"; analysis["Progressive"]["msg"] = "More pop."
+        analysis["Linear"]["status"] = "OK Compatible"; analysis["Linear"]["msg"] = "Use for a plush coil feel."
+        analysis["Progressive"]["status"] = "OK Compatible"; analysis["Progressive"]["msg"] = "Use for more pop and bottom-out resistance."
         if has_hbo: analysis["Linear"]["msg"] += " (HBO handles bottom-out)."
     else:
-        analysis["Linear"]["status"] = "Caution"; analysis["Linear"]["msg"] = "Risk of bottom-out."
-        analysis["Progressive"]["status"] = "OK Optimal"; analysis["Progressive"]["msg"] = "Compensates for low ramp-up."
+        analysis["Linear"]["status"] = "Caution"; analysis["Linear"]["msg"] = "High risk of bottom-out without strong HBO."
+        analysis["Progressive"]["status"] = "OK Optimal"; analysis["Progressive"]["msg"] = "Essential to compensate for lack of ramp-up."
     return analysis
 
 def update_bias_from_category():
@@ -111,7 +112,7 @@ def update_category_from_bike():
         st.session_state.rear_bias_slider = CATEGORY_DATA[cat_name]["bias"]
 
 # ==========================================================
-# 3. UI MAIN
+# 3. UI MAIN & CHASSIS
 # ==========================================================
 col_title, col_reset = st.columns([0.8, 0.2])
 with col_title:
@@ -141,8 +142,14 @@ with col_r2:
         rider_kg = rider_in * LB_TO_KG
     else:
         rider_kg = st.number_input("Rider Weight (kg)", 40.0, 130.0, 68.0, 0.5)
+    
     gear_def = 5.0 if unit_mass == "North America (lbs)" else 4.0
-    gear_kg = st.number_input("Gear Weight (kg)", 0.0, 25.0, gear_def, 0.5)
+    # 1. Gear Weight Unit Bug Fix
+    gear_input = st.number_input(
+        "Gear Weight (lbs)" if unit_mass == "North America (lbs)" else "Gear Weight (kg)", 
+        0.0, 25.0, gear_def, 0.5
+    )
+    gear_kg = gear_input * LB_TO_KG if unit_mass == "North America (lbs)" else gear_input
 
 # --- CHASSIS DATA ---
 st.header("2. Chassis Data")
@@ -190,7 +197,8 @@ with col_c1:
 with col_c2:
     if 'rear_bias_slider' not in st.session_state: st.session_state.rear_bias_slider = defaults["bias"]
     st.markdown("### Rear Bias (%)")
-    final_bias_calc = st.slider("Rear Bias (%)", 55, 75, key="rear_bias_slider", label_visibility="collapsed")
+    # 2. Expand Bias Slider Range
+    final_bias_calc = st.slider("Rear Bias (%)", 55, 80, key="rear_bias_slider", label_visibility="collapsed")
     total_system_kg = rider_kg + gear_kg + bike_kg
     rear_val_kg = total_system_kg * (final_bias_calc/100)
     st.info(f"Weight Distribution Test: Front **{total_system_kg - rear_val_kg:.1f}kg** | Rear **{rear_val_kg:.1f}kg**")
@@ -205,13 +213,17 @@ else:
 
 with col_k1:
     travel_mm, stroke_mm = st.number_input("Rear Travel (mm)", 0.0, 300.0, float(raw_travel), 1.0), st.number_input("Shock Stroke (mm)", 1.5, 100.0, float(raw_stroke), 0.5)
+
+# 3. Secure Variable Initialisation
+calc_lr_start = travel_mm / stroke_mm if stroke_mm > 0 else 0
+
 with col_k2:
     adv_kinematics = st.checkbox("Advanced Kinematics", value=(is_db_bike or manual_entry_mode))
     if adv_kinematics:
         lr_start, prog_pct = st.number_input("LR Start Rate", 1.5, 4.0, raw_lr_start, 0.05), st.number_input("Progression (%)", -10.0, 60.0, raw_prog, 1.0)
         calc_lr_start = lr_start
     else:
-        calc_lr_start, prog_pct = travel_mm / stroke_mm if stroke_mm > 0 else 0, float(defaults["progression"])
+        prog_pct = float(defaults["progression"])
 
 # --- SPRING SELECTION ---
 st.header("4. Spring Compatibility & Selection")
@@ -239,7 +251,8 @@ target_sag = st.slider("Target Sag (%)", 20.0, 40.0, float(defaults["base_sag"])
 # ==========================================================
 # 4. CALCULATIONS
 # ==========================================================
-total_drop = (calc_lr_start - (calc_lr_start * (1 - (prog_pct/100))))
+# 4. Simplified Progression Math
+total_drop = calc_lr_start * (prog_pct / 100)
 effective_lr = calc_lr_start - (total_drop * (target_sag / 100)) if adv_kinematics else travel_mm / stroke_mm
 eff_rider_kg = rider_kg + (gear_kg * COUPLING_COEFFS[category])
 rear_load_lbs = ((eff_rider_kg + bike_kg) * (final_bias_calc / 100) - unsprung_kg) * KG_TO_LB
@@ -258,8 +271,6 @@ if raw_rate > 0:
 
     final_rate_for_tuning = int(round(raw_rate / 25) * 25)
     alt_rates = []
-    sprindex_model_info = "N/A"
-    gap_choice_log = "N/A"
 
     st.subheader(f"Recommended Spring Model")
     
@@ -285,7 +296,6 @@ if raw_rate > 0:
             upper_r, high_limit = gap_neighbors[1]
             st.warning(f"Calculated rate ({int(raw_rate)} lbs) falls in a gap.")
             gap_choice = st.radio("Choose option:", [f"Option A: {lower_r} (Plush)", f"Option B: {upper_r} (Supportive)"])
-            gap_choice_log = gap_choice
             chosen_range = lower_r if "Option A" in gap_choice else upper_r
             final_rate_for_tuning = low_limit if "Option A" in gap_choice else high_limit
             sprindex_model_info = f"{family} ({chosen_range} lbs)"
@@ -345,7 +355,6 @@ if raw_rate > 0:
         pdf.cell(200, 8, f"Spring Type: {spring_type_sel}", ln=True)
         if "Sprindex" in spring_type_sel:
             pdf.cell(200, 8, f"Chosen Hardware: {sprindex_model_info}", ln=True)
-            pdf.cell(200, 8, f"Gap Option Logic: {gap_choice_log}", ln=True)
         else:
             pdf.cell(200, 8, f"Required Size: {spring_size_mm}mm Stroke", ln=True)
         
