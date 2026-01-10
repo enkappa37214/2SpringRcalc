@@ -420,9 +420,11 @@ This calculator provides a theoretical baseline derived from kinematic geometry 
 Physical verification via sag measurement is mandatory.
 
 **Coil spring rate variability and technical setup constraints**
+
 Standard spring rate calculators provide a theoretical baseline using static mass and leverage ratios. These figures are approximations because they do not account for frame kinematics (linear, progressive, or regressive leverage curves), internal damper valving, or seal friction (stiction). High compression damping can reduce the required spring rate to achieve identical dynamic sag, a factor calculators ignore.
 
 **Dynamic mass and mechanical variables**
+
 Rider mass distribution is a dynamic state influenced by both equipment and technique:
 
 * **Active Load**: Riding style (pumping, jumping, or aggressive cornering) generates G-forces and vertical loads far exceeding static weight. Fore-aft movement and body positioning shift the center of gravity, altering the weight bias from neutral splits to extreme ratios.
