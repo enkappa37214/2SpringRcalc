@@ -12,12 +12,9 @@ KG_TO_LB = 2.20462
 IN_TO_MM = 25.4
 MM_TO_IN = 1/25.4
 STONE_TO_KG = 6.35029
-
-# Physics Tuning Constants
 PROGRESSIVE_CORRECTION_FACTOR = 0.97
 
-# --- Data Tables ---
-# UPDATED v12.10: Kinematics aligned with 600+ bike database analysis
+# --- Data Tables (Refined v12.12) ---
 CATEGORY_DATA = {
     "Downcountry": {
         "travel": 115, "stroke": 45.0, "base_sag": 28,
@@ -29,11 +26,11 @@ CATEGORY_DATA = {
     },
     "All-Mountain": {
         "travel": 145, "stroke": 55.0, "base_sag": 31,
-        "progression": 21, "lr_start": 2.90, "desc": "140–150 mm", "bike_mass_def_kg": 14.5, "bias": 65
+        "progression": 21, "lr_start": 2.92, "desc": "140–150 mm", "bike_mass_def_kg": 14.5, "bias": 65
     },
     "Enduro": {
         "travel": 160, "stroke": 60.0, "base_sag": 33,
-        "progression": 23, "lr_start": 3.00, "desc": "150–170 mm", "bike_mass_def_kg": 15.10, "bias": 67
+        "progression": 23, "lr_start": 3.02, "desc": "150–170 mm", "bike_mass_def_kg": 15.10, "bias": 67
     },
     "Long Travel Enduro": {
         "travel": 175, "stroke": 65.0, "base_sag": 34,
@@ -50,11 +47,8 @@ CATEGORY_DATA = {
 }
 
 SKILL_MODIFIERS = {
-    "Just starting": {"bias": +4},
-    "Beginner":      {"bias": +2},
-    "Intermediate":  {"bias": 0},
-    "Advanced":      {"bias": -1},
-    "Racer":         {"bias": -2}
+    "Just starting": {"bias": +4}, "Beginner": {"bias": +2}, 
+    "Intermediate": {"bias": 0}, "Advanced": {"bias": -1}, "Racer": {"bias": -2}
 }
 SKILL_LEVELS = list(SKILL_MODIFIERS.keys())
 
@@ -81,8 +75,6 @@ SPRINDEX_DATA = {
     "Enduro (65mm)":   {"max_stroke": 65, "ranges": ["340-380", "390-430", "450-500", "500-550", "540-610", "610-700"]},
     "DH (75mm)":       {"max_stroke": 75, "ranges": ["290-320", "340-370", "400-440", "450-490", "510-570", "570-630"]}
 }
-
-COMMON_STROKES = [37.5, 40.0, 42.5, 45.0, 47.5, 50.0, 52.5, 55.0, 57.5, 60.0, 62.5, 65.0, 70.0, 72.5, 75.0]
 
 # ==========================================================
 # 2. HELPER FUNCTIONS
@@ -131,18 +123,15 @@ def analyze_spring_compatibility(progression_pct, has_hbo):
 
 # --- CALLBACKS ---
 def update_bias_from_category():
-    """Update rear bias slider when category changes manually"""
     cat = st.session_state.category_select
     st.session_state.rear_bias_slider = CATEGORY_DATA[cat]["bias"]
 
 def update_category_from_bike():
     selected_model = st.session_state.bike_selector
     bike_db = load_bike_database()
-    
     if selected_model:
         bike_row = bike_db[bike_db['Model'] == selected_model].iloc[0]
         t = bike_row['Travel_mm']
-        
         cat_keys = list(CATEGORY_DATA.keys())
         new_idx = 3 # Default Enduro
         if t < 125: new_idx = 0
@@ -151,7 +140,6 @@ def update_category_from_bike():
         elif t < 170: new_idx = 3
         elif t < 185: new_idx = 4
         else: new_idx = 6 # DH
-        
         st.session_state.category_select = cat_keys[new_idx]
         st.session_state.rear_bias_slider = CATEGORY_DATA[cat_keys[new_idx]]["bias"]
 
@@ -192,7 +180,7 @@ with col_r2:
     else:
         rider_in = st.number_input("Rider Weight (kg)", 40.0, 130.0, 68.0, 0.5)
         rider_kg = rider_in
-
+    
     gear_label = "Gear Weight (lbs)" if unit_mass == "North America (lbs)" else "Gear Weight (kg)"
     gear_def = 5.0 if unit_mass == "North America (lbs)" else 4.0
     gear_in = st.number_input(gear_label, 0.0, 25.0, gear_def, 0.5)
@@ -210,30 +198,34 @@ is_db_bike = False
 if not bike_db.empty:
     bike_models = list(bike_db['Model'].unique())
     selected_model = st.selectbox(
-        "🚲 Select Bike Model (Auto-Fill)", 
-        bike_models, 
-        index=None, 
-        placeholder="Type to search...",
-        key='bike_selector',
-        on_change=update_category_from_bike
+        "🚲 Select Bike Model (Auto-Fill)", bike_models, index=None, 
+        placeholder="Type to search...", key='bike_selector', on_change=update_category_from_bike
     )
-    
     if selected_model:
         selected_bike_data = bike_db[bike_db['Model'] == selected_model].iloc[0]
         is_db_bike = True
-        st.success(f"Loaded data for **{selected_model}**: {selected_bike_data['Travel_mm']:.0f}mm Travel | {selected_bike_data['Progression_Pct']:.1f}% Progression")
+        
+        # Check against Archetype (Confidence Feature)
+        arch_check = CATEGORY_DATA.get(st.session_state.get('category_select', 'Enduro'))
+        if arch_check:
+            real_lr = selected_bike_data['Start_Leverage']
+            base_lr = arch_check['lr_start']
+            dev_pct = abs((real_lr - base_lr) / base_lr) * 100
+            if dev_pct > 5.0:
+                 st.warning(f"📊 **Unique Kinematics Detected:** This bike's leverage ratio ({real_lr:.2f}) deviates significantly ({dev_pct:.1f}%) from the category average ({base_lr:.2f}). **Good thing we are using real data!**")
+            else:
+                 st.success(f"✅ Loaded: **{selected_model}** | Kinematics match category norms.")
+        else:
+             st.success(f"Loaded: **{selected_model}**")
+
 else:
-    st.warning("Database file not found. Using Manual Mode.")
+    st.warning("Database not found. Manual Mode active.")
 
 cat_options = list(CATEGORY_DATA.keys())
-
 category = st.selectbox(
-    "Category (Determines Weight Bias)",
-    cat_options,
+    "Category (Determines Weight Bias & Defaults)", cat_options,
     format_func=lambda x: f"{x} ({CATEGORY_DATA[x]['desc']})",
-    key='category_select',
-    index=3,  # Default to Enduro
-    on_change=update_bias_from_category 
+    key='category_select', index=3, on_change=update_bias_from_category
 )
 defaults = CATEGORY_DATA[category]
 
@@ -246,7 +238,6 @@ with col_c1:
         mat = st.selectbox("Frame Material", ["Carbon", "Aluminium"])
         level = st.selectbox("Build Level", ["Entry-Level", "Mid-Level", "High-End"])
         size = st.selectbox("Size", list(SIZE_WEIGHT_MODS.keys()), index=2)
-        
         level_idx = {"Entry-Level": 0, "Mid-Level": 1, "High-End": 2}[level]
         base_w = BIKE_WEIGHT_EST[category][mat][level_idx]
         est_w = base_w + SIZE_WEIGHT_MODS[size]
@@ -267,8 +258,7 @@ with col_c2:
     skill_suggestion = SKILL_MODIFIERS[skill]["bias"]
     
     cl1, cl2 = st.columns([0.7, 0.3])
-    with cl1:
-        st.markdown("### Rear Bias")
+    with cl1: st.markdown("### Rear Bias")
     with cl2:
         if st.button("Reset", help=f"Reset to {cat_def_bias}%"):
             st.session_state.rear_bias_slider = cat_def_bias
@@ -279,16 +269,10 @@ with col_c2:
         
     rear_bias_in = st.slider("Base Bias (%)", 55, 75, key="rear_bias_slider", label_visibility="collapsed")
     final_bias_calc = rear_bias_in
-
-    st.caption(f"Category Default: **{cat_def_bias}%** (Dynamic/Attack)")
-    
+    st.caption(f"Category Default: **{cat_def_bias}%**")
     if skill_suggestion != 0:
         advice_sign = "+" if skill_suggestion > 0 else ""
-        st.info(f"💡 Because you selected **{skill}**, consider applying **{advice_sign}{skill_suggestion}%** bias.")
-    else:
-        st.caption(f"For **{skill}**, the default bias is typically appropriate.")
-        
-    st.markdown(f"**Selected Bias:** :blue-background[{final_bias_calc}%]")
+        st.info(f"💡 Skill Modifier: **{advice_sign}{skill_suggestion}%** bias recommended.")
 
 # --- Unsprung Mass ---
 with col_c1:
@@ -338,6 +322,14 @@ with col_k1:
 travel_mm = travel_in * IN_TO_MM if unit_len != "Millimetres (mm)" else travel_in
 stroke_mm = stroke_in * IN_TO_MM if unit_len != "Millimetres (mm)" else stroke_in
 
+# SAFETY RAIL: Check for Catastrophic Stroke Mismatch
+if stroke_mm > 0:
+    implied_lr = travel_mm / stroke_mm
+    if implied_lr > 3.3 or implied_lr < 2.2:
+        st.error(f"⚠️ **CRITICAL WARNING:** Your ratio ({implied_lr:.2f}) is outside standard norms (2.2–3.3). Check Shock Stroke!")
+    elif not is_db_bike:
+        st.warning(f"ℹ️ **Generic Mode:** Assuming {stroke_mm:.1f}mm stroke. Verify this against your bike manual!")
+
 with col_k2:
     adv_kinematics = st.checkbox("Advanced Kinematics (Leverage Ratio)", value=is_db_bike)
     use_advanced_calc = False
@@ -360,17 +352,17 @@ with col_k2:
             else:
                 prog_pct = 0
             st.caption(f"Calculated Progression: {prog_pct:.1f}%")
-
         calc_lr_start = lr_start
         calc_lr_end = lr_end
     else:
+        # Added Tooltip Warning per Audit
+        st.info("ℹ️ **Standard Mode:** Assumes linear leverage. Use Advanced Mode for high-pivot or progressive frames.")
         prog_pct = float(defaults["progression"])
         if stroke_mm > 0:
             mean_lr = travel_mm / stroke_mm
             st.metric("Mean Leverage Ratio", f"{mean_lr:.2f}")
         else:
             mean_lr = 0
-    
     has_hbo = st.checkbox("Shock has HBO (Hydraulic Bottom Out)?")
 
 analysis = analyze_spring_compatibility(prog_pct, has_hbo)
@@ -381,7 +373,7 @@ for spring_type, info in analysis.items():
     else:
         st.markdown(f"**{info['status']} {spring_type}**: {info['msg']}")
 
-spring_type_sel = st.selectbox("Select Spring for Calculation", ["Standard Steel (Linear)", "Lightweight Steel/Ti", "Sprindex", "Progressive Coil"], index=0)
+spring_type_sel = st.selectbox("Select Spring", ["Standard Steel (Linear)", "Lightweight Steel/Ti", "Sprindex", "Progressive Coil"], index=0)
 active_spring_type = spring_type_sel
 
 # ==========================================================
@@ -423,9 +415,13 @@ if raw_rate > 0:
 
     final_rate_for_tuning = int(round(raw_rate / 25) * 25)
 
+    if not is_db_bike:
+        # Confidence Range
+        var_lbs = raw_rate * 0.08 
+        st.info(f"ℹ️ **Generic Estimate:** Recommended range is **{int(raw_rate - var_lbs)} – {int(raw_rate + var_lbs)} lbs** due to kinematic variance.")
+
     if active_spring_type == "Sprindex":
         st.subheader("Sprindex Recommendation")
-        
         family = None
         if stroke_mm <= 55: family = "XC/Trail (55mm)"
         elif stroke_mm <= 65: family = "Enduro (65mm)"
@@ -433,7 +429,6 @@ if raw_rate > 0:
         
         if family:
             st.markdown(f"**Compatible Family:** {family}")
-            
             ranges = SPRINDEX_DATA[family]["ranges"]
             found_match = False
             gap_neighbors = []
@@ -447,7 +442,6 @@ if raw_rate > 0:
                     final_rate_for_tuning = spr_rounded
                     found_match = True
                     break
-                
                 if i > 0:
                     prev_low, prev_high = map(int, ranges[i-1].split("-"))
                     if prev_high < raw_rate < low:
@@ -456,36 +450,23 @@ if raw_rate > 0:
             if not found_match and gap_neighbors:
                 lower_range_str, lower_limit_val = gap_neighbors[0]
                 upper_range_str, upper_limit_val = gap_neighbors[1]
-                
-                st.warning(f"⚠️ Your rate ({int(raw_rate)} lbs) falls in a gap between Sprindex ranges.")
-                
-                gap_choice = st.radio(
-                    "Choose your preferred option to see Tuning details:",
-                    [f"Option A: {lower_range_str} (Maxed at {lower_limit_val} lbs)", 
-                     f"Option B: {upper_range_str} (Min setting at {upper_limit_val} lbs)"]
-                )
-                
+                st.warning(f"⚠️ Your rate ({int(raw_rate)} lbs) falls in a gap.")
+                gap_choice = st.radio("Choose option:",
+                    [f"Option A: {lower_range_str} (Max {lower_limit_val})", f"Option B: {upper_range_str} (Min {upper_limit_val})"])
                 if "Option A" in gap_choice:
                     final_rate_for_tuning = lower_limit_val
                     chosen_sag = (rear_load_lbs * effective_lr) / (lower_limit_val * MM_TO_IN) / stroke_mm * 100
-                    st.info(f"**Selected Option A:** {lower_range_str}")
-                    st.markdown(f"Resulting Sag: **{chosen_sag:.1f}%**")
-                    st.caption("Feel: Plusher, more grip.")
-                    
+                    st.info(f"Option A Sag: **{chosen_sag:.1f}%** (Plush)")
                 else:
                     final_rate_for_tuning = upper_limit_val
                     chosen_sag = (rear_load_lbs * effective_lr) / (upper_limit_val * MM_TO_IN) / stroke_mm * 100
-                    st.info(f"**Selected Option B:** {upper_range_str}")
-                    st.markdown(f"Resulting Sag: **{chosen_sag:.1f}%**")
-                    st.caption("Feel: More support, race feel.")
-
+                    st.info(f"Option B Sag: **{chosen_sag:.1f}%** (Support)")
             elif not found_match:
                  st.error("Calculated rate is outside standard Sprindex ranges.")
                  final_rate_for_tuning = int(raw_rate)
         else:
             st.error(f"Shock stroke ({stroke_mm}mm) exceeds Sprindex maximums.")
             final_rate_for_tuning = int(raw_rate)
-
     else:
         st.subheader("Available Spring Options")
         options = []
@@ -498,7 +479,6 @@ if raw_rate > 0:
             r_sag_pct = (r_sag_mm / stroke_mm) * 100
             tag = "✅ Recommended" if rate == center_rate else ("⚠️ Too Soft" if r_sag_pct > 35 else ("⚠️ Too Stiff" if r_sag_pct < 25 else "Alternative"))
             options.append({"Spring Rate": f"{rate} lbs", "Resulting Sag (%)": f"{r_sag_pct:.1f}%", "Fit": tag})
-        
         st.dataframe(pd.DataFrame(options).style.apply(lambda x: ['background-color: #d4edda' if 'Recommended' in v else '' for v in x], subset=['Fit']), hide_index=True)
 
     st.subheader("Fine Tuning (Preload)")
@@ -513,10 +493,3 @@ if raw_rate > 0:
     st.dataframe(pd.DataFrame(preload_data), hide_index=True)
 else:
     st.error("Ensure Stroke and Travel are > 0.")
-
-st.info("""
-**Disclaimers:**
-* **Rate Tolerance:** Standard coils vary +/- 5%.
-* **Stroke Compatibility:** Ensure spring stroke > shock stroke to avoid coil bind.
-* **Diameter:** Check spring ID compatibility with your specific shock body.
-""")
