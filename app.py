@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import datetime
+from fpdf import FPDF
 from streamlit_gsheets import GSheetsConnection
 
 # ==========================================================
@@ -8,7 +9,13 @@ from streamlit_gsheets import GSheetsConnection
 # ==========================================================
 st.set_page_config(page_title="MTB Spring Rate Calculator", page_icon="⚙️", layout="centered")
 
-# --- Initialise Session State to prevent "Double Setting" Error ---
+# --- Reset Function ---
+def reset_form():
+    for key in st.session_state.keys():
+        del st.session_state[key]
+    st.rerun()
+
+# --- Initialise Session State ---
 if 'category_select' not in st.session_state:
     st.session_state.category_select = "Enduro"
 
@@ -114,6 +121,9 @@ st.caption("Capability Notice: This tool was built for personal use. If you find
 
 bike_db = load_bike_database()
 
+with st.sidebar:
+    st.button("🔄 Reset Calculator", on_click=reset_form, type="secondary")
+
 with st.expander("⚙️ Settings & Units"):
     col_u1, col_u2 = st.columns(2)
     with col_u1: unit_mass = st.radio("Mass Units", ["Global (kg)", "North America (lbs)", "UK Hybrid (st & kg)"])
@@ -148,6 +158,7 @@ with col_search:
             selected_model = st.selectbox("🚲 Select Bike Model (Auto-Fill)", list(bike_db['Model'].unique()), index=None, placeholder="Type to search...", key='bike_selector', on_change=update_category_from_bike)
             if selected_model:
                 selected_bike_data, is_db_bike, bike_model_log = bike_db[bike_db['Model'] == selected_model].iloc[0], True, selected_model
+                st.success(f"✅ Verified Model Loaded: {selected_model}")
         else: manual_entry_mode = True
 
 if manual_entry_mode:
@@ -173,11 +184,26 @@ with col_c1:
     else:
         frame_size_log = st.selectbox("Frame Size", list(SIZE_WEIGHT_MODS.keys()), index=2)
         bike_kg = st.number_input("Bike Weight (kg)", 7.0, 36.0, defaults["bike_mass_def_kg"] + (EBIKE_WEIGHT_PENALTY_KG if is_ebike else 0.0), 0.1)
+    
+    unsprung_mode = st.toggle("Estimate Unsprung Mass", value=False)
+    if unsprung_mode:
+        u_tier = st.selectbox("Wheelset Tier", ["Light", "Standard", "Heavy"], index=1)
+        u_mat = st.selectbox("Rear Triangle", ["Carbon", "Aluminium"], index=1)
+        unsprung_kg = estimate_unsprung(u_tier, u_mat, st.checkbox("Tyre Inserts?"), is_ebike)
+    else:
+        unsprung_kg = st.number_input("Unsprung (kg)", 0.0, 25.0, 4.27 + (2.0 if is_ebike else 0.0), 0.01)
 
 with col_c2:
     if 'rear_bias_slider' not in st.session_state: st.session_state.rear_bias_slider = defaults["bias"]
-    final_bias_calc = st.slider("Rear Bias (%)", 55, 75, key="rear_bias_slider")
-    unsprung_kg = st.number_input("Unsprung (kg)", 0.0, 25.0, 4.27 + (2.0 if is_ebike else 0.0), 0.01)
+    st.markdown("### Rear Bias (%)")
+    final_bias_calc = st.slider("Rear Bias (%)", 55, 75, key="rear_bias_slider", label_visibility="collapsed")
+    skill_suggestion = SKILL_MODIFIERS[skill]["bias"]
+    st.caption(f"Category Default: **{defaults['bias']}%**")
+    if skill_suggestion != 0:
+        advice_sign = "+" if skill_suggestion > 0 else ""
+        st.info(f"💡 Skill Modifier: **{advice_sign}{skill_suggestion}%** bias recommended.")
+    else:
+        st.info("💡 Skill Modifier: **0%** bias adjustment recommended.")
 
 # ==========================================================
 # 4. KINEMATICS & SPRING SELECTION
@@ -200,10 +226,11 @@ with col_k2:
         calc_lr_start = lr_start
     else:
         calc_lr_start, prog_pct = travel_mm / stroke_mm if stroke_mm > 0 else 0, float(defaults["progression"])
+        st.caption(f"Calculated Average Leverage Ratio: **{calc_lr_start:.2f}**")
+        st.caption(f"Using category default progression: **{prog_pct:.1f}%**")
     has_hbo = st.checkbox("Shock has HBO?")
 
-# Spring Compatibility
-analysis = analyze_spring_compatibility(prog_pct, has_hbo)
+analysis = analyze_spring_compatibility(progression_pct=prog_pct, has_hbo=has_hbo)
 st.subheader("Spring Compatibility")
 for s_type, info in analysis.items():
     if "Avoid" in info["status"] or "Caution" in info["status"]: st.markdown(f"❌ **{s_type}**: {info['msg']}")
@@ -217,14 +244,11 @@ spring_type = st.selectbox("Select Spring Type", ["Standard Steel (Linear)", "Li
 st.header("4. Setup Preferences")
 target_sag = st.slider("Target Sag (%)", 20.0, 40.0, float(defaults["base_sag"]), 0.5)
 
-# Calculate effective LR at sag point
 total_drop = (calc_lr_start - (calc_lr_start * (1 - (prog_pct/100))))
 effective_lr = calc_lr_start - (total_drop * (target_sag / 100)) if adv_kinematics else travel_mm / stroke_mm
-
 eff_rider_kg = rider_kg + (gear_kg * COUPLING_COEFFS[category])
 rear_load_lbs = ((eff_rider_kg + bike_kg) * (final_bias_calc / 100) - unsprung_kg) * KG_TO_LB
 raw_rate = (rear_load_lbs * effective_lr) / (stroke_mm * (target_sag / 100) * MM_TO_IN) if stroke_mm > 0 else 0
-
 if spring_type == "Progressive Coil": raw_rate *= PROGRESSIVE_CORRECTION_FACTOR
 
 st.divider()
@@ -234,7 +258,6 @@ if raw_rate > 0:
     res_c1.metric("Calculated spring rate", f"{int(raw_rate)} lbs/in")
     res_c2.metric("Target Sag", f"{target_sag:.1f}% ({stroke_mm * (target_sag / 100):.1f} mm)")
 
-    # Sprindex Recommendation
     if spring_type == "Sprindex":
         st.subheader("Sprindex Recommendation")
         family = "XC/Trail (55mm)" if stroke_mm <= 55 else "Enduro (65mm)" if stroke_mm <= 65 else "DH (75mm)"
@@ -243,7 +266,6 @@ if raw_rate > 0:
             low, high = map(int, r_str.split("-"))
             if low <= raw_rate <= high: st.success(f"✅ **Perfect Fit:** {r_str} lbs/in")
 
-    # Fine Tuning Table
     st.subheader("Fine Tuning (Preload)")
     final_rate = int(round(raw_rate / 25) * 25)
     preload_data = []
@@ -252,6 +274,39 @@ if raw_rate > 0:
         sag_pct = (sag_in / (stroke_mm * MM_TO_IN)) * 100
         preload_data.append({"Turns": turns, "Sag (%)": f"{sag_pct:.1f}%", "Status": "✅" if 1.0 <= turns < 3.0 else "⚠️"})
     st.dataframe(pd.DataFrame(preload_data), hide_index=True)
+
+    def generate_pdf():
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font("Arial", 'B', 16)
+        pdf.cell(200, 10, "MTB Spring Rate Calculation Report", ln=True, align='C')
+        pdf.set_font("Arial", size=11)
+        pdf.ln(10)
+        pdf.cell(200, 8, f"Date: {datetime.datetime.now().strftime('%Y-%m-%d')}", ln=True)
+        pdf.cell(200, 8, f"Bike: {bike_model_log}", ln=True)
+        pdf.cell(200, 8, f"Rider Weight: {rider_kg:.1f} kg", ln=True)
+        pdf.ln(5)
+        pdf.set_font("Arial", 'B', 14)
+        pdf.cell(200, 10, "Calculation Results", ln=True)
+        pdf.set_font("Arial", size=12)
+        pdf.cell(200, 10, f"Recommended Spring Rate: {int(raw_rate)} lbs/in", ln=True)
+        pdf.cell(200, 10, f"Target Sag: {target_sag}%", ln=True)
+        pdf.ln(5)
+        pdf.set_font("Arial", 'B', 12)
+        pdf.cell(200, 10, f"Preload Fine Tuning ({final_rate} lbs spring)", ln=True)
+        pdf.set_font("Arial", 'B', 10)
+        pdf.cell(60, 8, "Turns", 1); pdf.cell(60, 8, "Resulting Sag (%)", 1); pdf.cell(60, 8, "Status", 1, ln=True)
+        pdf.set_font("Arial", size=10)
+        for row in preload_data:
+            pdf.cell(60, 8, str(row["Turns"]), 1)
+            pdf.cell(60, 8, row["Sag (%)"], 1)
+            pdf.cell(60, 8, row["Status"], 1, ln=True)
+        pdf.ln(10)
+        pdf.set_font("Arial", 'I', 9)
+        pdf.multi_cell(0, 5, "Engineering Disclaimer: This report provides a theoretical baseline derived from kinematic geometry and static mass properties. Actual spring rate requirements may deviate due to damper valving characteristics, system friction, and dynamic riding loads. Data is for estimation purposes; physical verification via sag measurement is mandatory.")
+        return pdf.output(dest="S").encode("latin-1")
+
+    st.download_button(label="📄 Export Results to PDF", data=generate_pdf(), file_name=f"MTB_Spring_Report_{datetime.datetime.now().strftime('%Y%m%d')}.pdf", mime="application/pdf")
 
 # ==========================================================
 # 6. LOGGING & REVIEW
@@ -287,4 +342,16 @@ except Exception as e: st.error(f"❌ Cloud Connection Inactive: {e}.")
 
 st.markdown("---")
 st.subheader("Capability Notice")
-st.info("Engineering Disclaimer: Data is for estimation; physical sag measurement is mandatory.")
+st.info(
+    """
+    **Engineering Disclaimer**
+    
+    This calculator provides a theoretical baseline derived from kinematic geometry and static mass properties. 
+    Actual spring rate requirements may deviate due to:
+    * Damper valving characteristics (compression tune).
+    * System friction (seals, bushings, bearings).
+    * Dynamic riding loads and terrain severity.
+    
+    Data is provided for estimation purposes; physical verification via sag measurement is mandatory.
+    """
+)
