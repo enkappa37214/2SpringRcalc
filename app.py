@@ -412,11 +412,28 @@ try:
         st.success("Setup successfully logged!")
 except Exception as e: st.error(f"Cloud Connection Inactive: {e}.")
 
-st.markdown("---"); st.subheader("Capability Notice")
+st.markdown("---"); st.subheader("Engineering Disclaimer:")
 st.info(
     """
-    Engineering Disclaimer: This calculator provides a theoretical baseline derived from kinematic geometry and static mass properties. 
-    Actual spring rate requirements may deviate due to damper valving, friction, and dynamic riding loads. 
+    This calculator provides a theoretical baseline derived from kinematic geometry and static mass properties. 
     Physical verification via sag measurement is mandatory.
+    
+    Coil spring rate variability and technical setup constraints
+    Standard spring rate calculators provide a theoretical baseline using static mass and leverage ratios. These figures are approximations because they do not account for frame kinematics (linear, progressive, or regressive leverage curves), internal damper valving, or seal friction (stiction). High compression damping can reduce the required spring rate to achieve identical dynamic sag, a factor calculators ignore.
+    
+    Dynamic mass and mechanical variables
+    Rider mass distribution is a dynamic state influenced by both equipment and technique:
+    •	Active Load: Riding style (pumping, jumping, or aggressive cornering) generates G-forces and vertical loads far exceeding static weight. Fore-aft movement and body positioning shift the center of gravity, altering the weight bias from neutral splits to extreme ratios.
+    •	Geometry and Cockpit: Chainstay length, front-center ratios, and cockpit height (stack/stem length) dictate the rider's default leverage over the shock. High stack heights or slack seat tube angles shift mass rearward, increasing the load on the coil during descents or climbs.
+    •	External Factors: Gear weight (packs/armour), unsprung mass (tyres/inserts), and terrain gradients change the effective sag point and the inertia the suspension must control.
+    
+    Limitations of reviews and professional protocols
+    External data from reviewers is often non-transferable due to differences in technical proficiency, trail gradients, and specific bike-shock combinations. While professional riders provide a performance benchmark, their setup protocols differ significantly from consumer experiences:
+    •	Base Tuning: Professionals start with factory default settings to isolate how subsequent changes affect the bike's neutral handling.
+    •	Technical Support: Elite riders rely on manufacturer technicians for internal modifications (proprietary valving/shim stacks). The athlete often communicates desired "feel" rather than mechanical specifics, which technicians then execute.
+    
+    Challenges for the non-professional
+    Beginner and intermediate riders face "setup paralysis" due to technical information overload without the context of trail feel. Unlike professionals, consumers lack a dedicated technical team and immediate access to multiple spring increments or proprietary valving/shim stacks. This makes distinguishing between spring rate issues and damping issues difficult.
+    Because fixed-rate coils rarely meet all terrain requirements, iterative testing with multiple springs (25 lb/in increments) or adjustable systems like Sprindex is necessary to achieve the required balance of small-bump sensitivity and bottom-out resistance.
     """
 )
