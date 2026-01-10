@@ -116,13 +116,15 @@ def update_category_from_bike():
 # ==========================================================
 # 3. UI MAIN & CHASSIS
 # ==========================================================
-st.title("MTB Spring Rate Calculator")
+col_title, col_reset = st.columns([0.8, 0.2])
+with col_title:
+    st.title("MTB Spring Rate Calculator")
+with col_reset:
+    st.button("🔄 Reset", on_click=reset_form, type="secondary", use_container_width=True)
+
 st.caption("Capability Notice: This tool was built for personal use. If you find an error, please signal the developer.")
 
 bike_db = load_bike_database()
-
-with st.sidebar:
-    st.button("🔄 Reset Calculator", on_click=reset_form, type="secondary")
 
 with st.expander("⚙️ Settings & Units"):
     col_u1, col_u2 = st.columns(2)
