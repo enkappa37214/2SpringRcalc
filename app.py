@@ -183,7 +183,7 @@ with col_r2:
     else:
         rider_in = st.number_input("Rider Weight (kg)", 40.0, 130.0, 68.0, 0.5)
         rider_kg = rider_in
-     
+      
     gear_label = "Gear Weight (lbs)" if unit_mass == "North America (lbs)" else "Gear Weight (kg)"
     gear_def = 5.0 if unit_mass == "North America (lbs)" else 4.0
     gear_in = st.number_input(gear_label, 0.0, 25.0, gear_def, 0.5)
@@ -251,7 +251,8 @@ with col_c1:
         bike_kg = est_w
         frame_size_log = size
     else:
-        frame_size_in = st.text_input("Frame Size (Optional)", placeholder="e.g. L, S3, 54cm")
+        # UPDATED: Standardised Frame Size input
+        frame_size_in = st.selectbox("Frame Size", list(SIZE_WEIGHT_MODS.keys()), index=2)
         if frame_size_in: frame_size_log = frame_size_in
         is_lbs = unit_mass == "North America (lbs)"
         lbl = "Bike Weight (lbs)" if is_lbs else "Bike Weight (kg)"
@@ -502,46 +503,56 @@ else:
     st.error("Ensure Stroke and Travel are > 0.")
 
 st.divider()
-# --- LOGGING OUTPUT ---
-st.subheader("📋 Configuration Log")
-with st.expander("Show Setup Data (For Export)", expanded=True):
-    # Detect Data Source Origins
-    weight_src = "Estimated" if weight_mode == "Estimate" else "Manual Input"
-    unsprung_src = "Estimated" if unsprung_mode else "Manual Input"
-    
-    kinematics_src = "Database" if is_db_bike else "Manual/Generic"
-    # Check if user overrode specific kinematic fields in manual mode
-    if not is_db_bike:
-        if travel_mm != defaults["travel"] or stroke_mm != defaults["stroke"]:
-            kinematics_src = "Manual (Customized)"
+# --- LOGGING OUTPUT (UPDATED) ---
+st.subheader("Configuration Log")
+st.caption("Show Setup Data (For Export)")
 
-    bias_offset = final_bias_calc - cat_def_bias
-    bias_status = "Default" if bias_offset == 0 else f"Custom ({bias_offset:+d}%)"
-    
-    log_payload = {
-        "User_Setup": {
-            "Chassis": chassis_type,
-            "Bike_Model": selected_model if selected_model else "Generic/Manual",
-            "Frame_Size": frame_size_log,
-            "Rider_Weight_Kg": round(rider_kg, 1),
-            "Bike_Weight_Kg": round(bike_kg, 1),
-            "Target_Sag_Pct": target_sag,
-            "Calculated_Spring_Rate": int(raw_rate) if raw_rate else 0
-        },
-        "Data_Origins": {
-            "Kinematics_Source": kinematics_src,
-            "Bike_Weight_Source": weight_src,
-            "Unsprung_Mass_Source": unsprung_src,
-            "Bias_Setting": bias_status
-        }
+# Detect Data Source Origins
+weight_src = "Estimated" if weight_mode == "Estimate" else "Manual Input"
+unsprung_src = "Estimated" if unsprung_mode else "Manual Input"
+
+kinematics_src = "Database" if is_db_bike else "Manual/Generic"
+# Check if user overrode specific kinematic fields in manual mode
+if not is_db_bike:
+    if travel_mm != defaults["travel"] or stroke_mm != defaults["stroke"]:
+        kinematics_src = "Manual (Customized)"
+
+bias_offset = final_bias_calc - cat_def_bias
+bias_status = "Default" if bias_offset == 0 else f"Custom ({bias_offset:+d}%)"
+
+log_payload = {
+    "User_Setup": {
+        "Chassis": chassis_type,
+        "Bike_Model": selected_model if selected_model else "Generic/Manual",
+        "Frame_Size": frame_size_log,
+        "Rider_Weight_Kg": round(rider_kg, 1),
+        "Bike_Weight_Kg": round(bike_kg, 1),
+        "Target_Sag_Pct": target_sag,
+        "Calculated_Spring_Rate": int(raw_rate) if raw_rate else 0
+    },
+    "Data_Origins": {
+        "Kinematics_Source": kinematics_src,
+        "Bike_Weight_Source": weight_src,
+        "Unsprung_Mass_Source": unsprung_src,
+        "Bias_Setting": bias_status
     }
-    st.json(log_payload)
+}
+st.json(log_payload, expanded=False)
 
-st.info("""
-**Disclaimers:**
-* **Preload Adjuster:** Minimum 1.0 turn required to secure spring. Do not run with loose coil.
-* **Damping Required:** Significant spring rate changes (>25 lbs) require Rebound damping adjustment.
-* **Rate Tolerance:** Standard coils vary +/- 5%.
-* **Stroke Compatibility:** Ensure spring stroke > shock stroke to avoid coil bind.
-* **Diameter:** Check spring ID compatibility with your specific shock body.
-""")
+# --- CAPABILITY NOTICE (REVERTED) ---
+st.markdown("---")
+st.subheader("Capability Notice")
+
+st.info(
+    """
+    **Engineering Disclaimer**
+    
+    This calculator provides a theoretical baseline derived from kinematic geometry and static mass properties. 
+    Actual spring rate requirements may deviate due to:
+    * Damper valving characteristics (compression tune).
+    * System friction (seals, bushings, bearings).
+    * Dynamic riding loads and terrain severity.
+    
+    Data is provided for estimation purposes; physical verification via sag measurement is mandatory.
+    """
+)
