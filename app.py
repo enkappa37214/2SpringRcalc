@@ -157,7 +157,6 @@ with col_toggle: manual_entry_mode = st.checkbox("Bike not listed?", help="Selec
 with col_search:
     if not manual_entry_mode:
         if not bike_db.empty:
-            # Modified Label
             selected_model = st.selectbox("Select Bike Model (Auto-Fill Shock & Advanced Kinematics)", list(bike_db['Model'].unique()), index=None, placeholder="Type to search...", key='bike_selector', on_change=update_category_from_bike)
             if selected_model:
                 selected_bike_data, is_db_bike, bike_model_log = bike_db[bike_db['Model'] == selected_model].iloc[0], True, selected_model
@@ -203,7 +202,8 @@ with col_c2:
     if skill_suggestion != 0:
         advice_sign = "+" if skill_suggestion > 0 else ""
         st.info(f"Skill Modifier: {advice_sign}{skill_suggestion}% bias recommended.")
-    else: st.info("Skill Modifier: 0% bias adjustment recommended.")
+    else:
+        st.info("Skill Modifier: 0% bias adjustment recommended.")
 
 # --- KINEMATICS ---
 st.header("3. Shock & Kinematics")
@@ -261,17 +261,17 @@ if raw_rate > 0:
     alt_rates = []
 
     # --- SPRING RECOMMENDATION LOGIC ---
-    st.subheader(f"Recommended Coil Model") # Header added to all
+    st.subheader(f"Recommended Coil Model")
     
     if "Sprindex" in spring_type_sel:
         family = "XC/Trail (55mm)" if stroke_mm <= 55 else "Enduro (65mm)" if stroke_mm <= 65 else "DH (75mm)"
-        st.markdown(f"**Sprindex Model:** {family}")
         ranges = SPRINDEX_DATA[family]["ranges"]
         found_match, gap_neighbors = False, []
         for i, r_str in enumerate(ranges):
             low, high = map(int, r_str.split("-"))
             if low <= raw_rate <= high:
                 st.success(f"Perfect Fit: {r_str} lbs/in")
+                st.markdown(f"**Sprindex Model:** {family}")
                 final_rate_for_tuning = int(round(raw_rate / 5) * 5)
                 found_match = True
                 break
@@ -285,10 +285,12 @@ if raw_rate > 0:
             upper_r, high_limit = gap_neighbors[1]
             st.warning(f"Calculated rate ({int(raw_rate)} lbs) falls in a gap.")
             gap_choice = st.radio("Choose option:", [f"Option A: {lower_r} (Plush)", f"Option B: {upper_r} (Supportive)"])
-            # Sync final tuning rate with selected option
+            # Sync selection to model display and tuning rate
+            chosen_range = lower_r if "Option A" in gap_choice else upper_r
             final_rate_for_tuning = low_limit if "Option A" in gap_choice else high_limit
+            st.markdown(f"**Sprindex Model:** {family} ({chosen_range} lbs)")
 
-        # Center Adjustable Settings table on final_rate_for_tuning
+        # Adjustable Settings centered on selection
         st.markdown("### Comparison of Adjustable Settings")
         step = 5 if family != "DH (75mm)" else 10
         center_sprindex = int(round(final_rate_for_tuning / step) * step)
@@ -298,7 +300,6 @@ if raw_rate > 0:
             alt_rates.append({"Rate (lbs)": f"{r} lbs", "Resulting Sag": f"{r_sag_pct:.1f}%", "Feel": "Plush" if r < center_sprindex else "Supportive" if r > center_sprindex else "Target"})
     
     else:
-        # For non-sprindex springs, use classic step logic
         st.markdown(f"**Coil Type:** {spring_type_sel}")
         if spring_type_sel == "Progressive Coil":
             st.info(f"Recommended Range: **{int(raw_rate)} - {int(raw_rate * 1.15)} lbs/in**")
@@ -314,8 +315,8 @@ if raw_rate > 0:
     
     st.table(alt_rates)
 
-    # --- FINE TUNING (Sync with Selection) ---
-    st.subheader(f"Fine Tuning (Preload - {final_rate_for_tuning} lbs spring)") # Label sync
+    # --- FINE TUNING (Sync with chosen model rate) ---
+    st.subheader(f"Fine Tuning (Preload - {final_rate_for_tuning} lbs spring)")
     preload_data = []
     for turns in [0.5, 1.0, 1.5, 2.0, 2.5, 3.0]:
         sag_in = (rear_load_lbs * effective_lr / final_rate_for_tuning) - (turns * 1.0 * MM_TO_IN)
@@ -340,13 +341,13 @@ if raw_rate > 0:
         pdf.set_font("Arial", size=10)
         for r_row in alt_rates:
             pdf.cell(60, 8, r_row["Rate (lbs)"], 1); pdf.cell(60, 8, r_row["Resulting Sag"], 1); pdf.cell(60, 8, r_row["Feel"], 1, ln=True)
-        pdf.ln(5); pdf.set_font("Arial", 'B', 12); pdf.cell(200, 10, "Preload Fine Tuning", ln=True)
+        pdf.ln(5); pdf.set_font("Arial", 'B', 12); pdf.cell(200, 10, f"Preload Fine Tuning ({final_rate_for_tuning} lbs)", ln=True)
         pdf.set_font("Arial", 'B', 10); pdf.cell(60, 8, "Turns", 1); pdf.cell(60, 8, "Resulting Sag (%)", 1); pdf.cell(60, 8, "Status", 1, ln=True)
         pdf.set_font("Arial", size=10)
         for row in preload_data:
             pdf.cell(60, 8, str(row["Turns"]), 1); pdf.cell(60, 8, row["Sag (%)"], 1); pdf.cell(60, 8, row["Status"], 1, ln=True)
         pdf.ln(10); pdf.set_font("Arial", 'I', 9)
-        pdf.multi_cell(0, 5, "Engineering Disclaimer: This report provides a theoretical baseline derived from kinematic geometry and static mass properties. Actual requirements may deviate due to damper valving, friction, and dynamic riding loads. Sag measurement is mandatory.")
+        pdf.multi_cell(0, 5, "Engineering Disclaimer: This report provides a theoretical baseline derived from kinematic geometry and static mass properties. Actual requirements may deviate due to damper valving, friction, and riding loads. Sag measurement is mandatory.")
         return pdf.output(dest="S").encode("latin-1")
     st.download_button(label="Export Results to PDF", data=generate_pdf(), file_name=f"MTB_Spring_Report_{datetime.datetime.now().strftime('%Y%m%d')}.pdf", mime="application/pdf")
 
