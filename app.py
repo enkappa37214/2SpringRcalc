@@ -18,7 +18,6 @@ def reset_form():
 if 'category_select' not in st.session_state:
     st.session_state.category_select = "Enduro"
 
-# --- Constants ---
 LB_TO_KG, KG_TO_LB = 0.453592, 2.20462
 IN_TO_MM, MM_TO_IN = 25.4, 1/25.4
 STONE_TO_KG = 6.35029
@@ -112,7 +111,7 @@ def update_category_from_bike():
         st.session_state.rear_bias_slider = CATEGORY_DATA[cat_name]["bias"]
 
 # ==========================================================
-# 3. UI MAIN & CHASSIS
+# 3. UI MAIN
 # ==========================================================
 col_title, col_reset = st.columns([0.8, 0.2])
 with col_title:
@@ -129,6 +128,7 @@ with st.expander("Settings & Units"):
     with col_u1: unit_mass = st.radio("Mass Units", ["Global (kg)", "North America (lbs)", "UK Hybrid (st & kg)"])
     with col_u2: unit_len = st.radio("Length Units", ["Millimetres (mm)", "Inches (\")"])
 
+# --- RIDER PROFILE ---
 st.header("1. Rider Profile")
 col_r1, col_r2 = st.columns(2)
 with col_r1: skill = st.selectbox("Rider Skill", SKILL_LEVELS, index=2)
@@ -144,6 +144,7 @@ with col_r2:
     gear_def = 5.0 if unit_mass == "North America (lbs)" else 4.0
     gear_kg = st.number_input("Gear Weight (kg)", 0.0, 25.0, gear_def, 0.5)
 
+# --- CHASSIS DATA ---
 st.header("2. Chassis Data")
 chassis_type = st.radio("Chassis Configuration", ["Analog Bike", "E-Bike"], horizontal=True)
 is_ebike = (chassis_type == "E-Bike")
@@ -205,9 +206,7 @@ with col_c2:
     else:
         st.info("Skill Modifier: 0% bias adjustment recommended.")
 
-# ==========================================================
-# 4. KINEMATICS
-# ==========================================================
+# --- KINEMATICS ---
 st.header("3. Shock & Kinematics")
 col_k1, col_k2 = st.columns(2)
 
@@ -226,44 +225,39 @@ with col_k2:
         calc_lr_start = lr_start
     else:
         calc_lr_start, prog_pct = travel_mm / stroke_mm if stroke_mm > 0 else 0, float(defaults["progression"])
-        st.caption(f"Calculated Average Leverage Ratio: {calc_lr_start:.2f}")
-        st.caption(f"Using category default progression: {prog_pct:.1f}%")
 
 if adv_kinematics and travel_mm > 0:
     st.subheader("Leverage Ratio Curve")
+    # Apply Quadratic Curve for Visual Progression
     x_travel = np.linspace(0, travel_mm, 50)
     lr_end = calc_lr_start * (1 - (prog_pct / 100))
-    y_lr = np.linspace(calc_lr_start, lr_end, 50)
+    # Curve equation: a*x^2 + b*x + c
+    y_lr = calc_lr_start + (lr_end - calc_lr_start) * (x_travel / travel_mm)**1.2
     chart_data = pd.DataFrame({"Travel (mm)": x_travel, "Leverage Ratio": y_lr}).set_index("Travel (mm)")
     st.line_chart(chart_data)
     st.caption(f"Start: {calc_lr_start:.2f} | End: {lr_end:.2f} | Progression: {prog_pct:.1f}%")
 
-# ==========================================================
-# 5. SPRING COMPATIBILITY & SELECTION
-# ==========================================================
+# --- SPRING COMPATIBILITY ---
 st.header("4. Spring Compatibility & Selection")
-
 with st.container():
     col_comp, col_sel = st.columns([0.6, 0.4])
-    
     with col_comp:
         st.subheader("Analysis")
-        # Shock HBO moved here
         has_hbo = st.checkbox("Shock has HBO (Hydraulic Bottom Out)?")
         analysis = analyze_spring_compatibility(progression_pct=prog_pct, has_hbo=has_hbo)
         for s_type, info in analysis.items():
             st.markdown(f"**{info['status']} {s_type}**: {info['msg']}")
-            
     with col_sel:
         st.subheader("Selection")
         spring_type = st.selectbox("Select Spring Type", ["Standard Steel (Linear)", "Lightweight Steel/Ti", "Sprindex", "Progressive Coil"])
 
-# ==========================================================
-# 6. CALCULATIONS & RESULTS
-# ==========================================================
+# --- SETUP PREFERENCES ---
 st.header("5. Setup Preferences")
 target_sag = st.slider("Target Sag (%)", 20.0, 40.0, float(defaults["base_sag"]), 0.5)
 
+# ==========================================================
+# 4. CALCULATIONS
+# ==========================================================
 total_drop = (calc_lr_start - (calc_lr_start * (1 - (prog_pct/100))))
 effective_lr = calc_lr_start - (total_drop * (target_sag / 100)) if adv_kinematics else travel_mm / stroke_mm
 eff_rider_kg = rider_kg + (gear_kg * COUPLING_COEFFS[category])
@@ -271,21 +265,40 @@ rear_load_lbs = ((eff_rider_kg + bike_kg) * (final_bias_calc / 100) - unsprung_k
 raw_rate = (rear_load_lbs * effective_lr) / (stroke_mm * (target_sag / 100) * MM_TO_IN) if stroke_mm > 0 else 0
 if spring_type == "Progressive Coil": raw_rate *= PROGRESSIVE_CORRECTION_FACTOR
 
+# ==========================================================
+# 5. RESULTS
+# ==========================================================
 st.divider()
 st.header("Results")
+
 if raw_rate > 0:
     res_c1, res_c2 = st.columns(2)
     res_c1.metric("Calculated spring rate", f"{int(raw_rate)} lbs/in")
     res_c2.metric("Target Sag", f"{target_sag:.1f}% ({stroke_mm * (target_sag / 100):.1f} mm)")
 
+    # Integrated Spring Selection Logic
+    st.subheader(f"Spring Recommendation: {spring_type}")
+    
     if spring_type == "Sprindex":
-        st.subheader("Sprindex Recommendation")
         family = "XC/Trail (55mm)" if stroke_mm <= 55 else "Enduro (65mm)" if stroke_mm <= 65 else "DH (75mm)"
-        st.markdown(f"Recommended Model: {family}")
+        st.markdown(f"**Recommended Model:** {family}")
+        found_sprindex = False
         for r_str in SPRINDEX_DATA[family]["ranges"]:
             low, high = map(int, r_str.split("-"))
-            if low <= raw_rate <= high: st.success(f"Perfect Fit: {r_str} lbs/in")
+            if low <= raw_rate <= high: 
+                st.success(f"Perfect Fit: {r_str} lbs/in")
+                found_sprindex = True
+        if not found_sprindex:
+            st.warning("Calculated rate is outside standard Sprindex ranges for this stroke length.")
+    
+    elif spring_type == "Progressive Coil":
+        st.info(f"Recommended Progressive Rate: **{int(raw_rate)} - {int(raw_rate * 1.15)} lbs/in**")
+        st.caption("Includes 3% correction factor for initial coil stiffness.")
+    
+    else:
+        st.info(f"Standard Linear Coil: **{int(round(raw_rate/25)*25)} lbs/in**")
 
+    # Fine Tuning Table
     st.subheader("Fine Tuning (Preload)")
     final_rate = int(round(raw_rate / 25) * 25)
     preload_data = []
@@ -310,6 +323,7 @@ if raw_rate > 0:
         pdf.cell(200, 10, "Calculation Results", ln=True)
         pdf.set_font("Arial", size=12)
         pdf.cell(200, 10, f"Recommended Spring Rate: {int(raw_rate)} lbs/in", ln=True)
+        pdf.cell(200, 10, f"Spring Type: {spring_type}", ln=True)
         pdf.cell(200, 10, f"Target Sag: {target_sag}%", ln=True)
         pdf.ln(5)
         pdf.set_font("Arial", 'B', 12)
@@ -329,7 +343,7 @@ if raw_rate > 0:
     st.download_button(label="Export Results to PDF", data=generate_pdf(), file_name=f"MTB_Spring_Report_{datetime.datetime.now().strftime('%Y%m%d')}.pdf", mime="application/pdf")
 
 # ==========================================================
-# 7. LOGGING & REVIEW
+# 6. LOGGING & REVIEW
 # ==========================================================
 st.divider()
 st.subheader("Configuration Log")
