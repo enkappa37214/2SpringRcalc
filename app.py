@@ -234,9 +234,6 @@ with st.container():
             st.warning("⚠️ Disclaimer: Using a progressive spring on a frame with >25% progression may result in an unusable 'Wall Effect' at travel end.")
         elif "Linear" in spring_type_sel and "Caution" in analysis["Linear"]["status"]:
             st.warning("⚠️ Disclaimer: Using a linear spring on a frame with low progression (<12%) significantly increases bottom-out risk.")
-        
-        # Internal Diameter Disclaimer
-        st.info("⚠️ Hardware Note: Verify Spring Internal Diameter (ID). Common standards include 35mm (Ohlins, Cane Creek) and 38mm (Fox, Marzocchi). Ensure compatible performance adapters are used to prevent binding.")
 
 st.header("5. Setup Preferences")
 target_sag = st.slider("Target Sag (%)", 20.0, 40.0, float(defaults["base_sag"]), 0.5)
@@ -378,6 +375,7 @@ try:
 except Exception as e: st.error(f"Cloud Connection Inactive: {e}.")
 
 st.markdown("---"); st.subheader("Capability Notice")
+
 st.info(
     """
     Engineering Disclaimer: This calculator provides a theoretical baseline derived from kinematic geometry and static mass properties. 
@@ -385,7 +383,8 @@ st.info(
     * Damper valving characteristics (compression tune).
     * System friction (seals, bushings, bearings).
     * Dynamic riding loads and terrain severity.
+    * Spring Internal Diameter (ID): Verify hardware compatibility (e.g., 35mm vs 38mm ID). Ensure performance adapters are used to prevent mechanical binding.
     
-    Data is for estimation purposes; physical verification via sag measurement is mandatory.
+    Data is provided for estimation purposes; physical verification via sag measurement is mandatory.
     """
 )
