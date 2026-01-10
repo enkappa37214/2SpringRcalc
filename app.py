@@ -404,6 +404,7 @@ flat_log = {
     "Timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     "Chassis": chassis_type,
     "Bike_Model": bike_model_log,
+    "Frame_Size": f_size,
     "Rider_Weight_Kg": round(rider_kg, 1),
     "Bike_Weight_Kg": round(bike_kg, 1),
     "Sprung_Mass_Kg": round(rider_kg + gear_kg + bike_kg - unsprung_kg, 1),
