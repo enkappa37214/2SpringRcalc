@@ -123,7 +123,6 @@ def analyze_spring_compatibility(progression_pct, has_hbo):
 
 # --- CALLBACKS ---
 def update_bias_from_category():
-    # Force update the slider in session state based on new category
     if 'category_select' in st.session_state:
         cat = st.session_state.category_select
         st.session_state.rear_bias_slider = CATEGORY_DATA[cat]["bias"]
@@ -149,6 +148,7 @@ def update_category_from_bike():
 # 3. UI MAIN
 # ==========================================================
 st.title("MTB Spring Rate Calculator")
+st.caption("Capability Notice: This tool was built for personal use, relying on the logic of just one simple rider. If you find an error, please signal the developer. If you feel you are smarter than the developer, the compiler is free - go build your own.")
 
 # Load Database
 bike_db = load_bike_database()
@@ -272,9 +272,7 @@ with col_c2:
     rear_bias_in = st.slider("Base Bias (%)", 55, 75, key="rear_bias_slider", label_visibility="collapsed")
     final_bias_calc = rear_bias_in
     
-    # FIXED: Restored (Dynamic/Attack) text
     st.caption(f"Category Default: **{cat_def_bias}%** (Dynamic/Attack)")
-    
     if skill_suggestion != 0:
         advice_sign = "+" if skill_suggestion > 0 else ""
         st.info(f"💡 Skill Modifier: **{advice_sign}{skill_suggestion}%** bias recommended.")
@@ -494,7 +492,17 @@ if raw_rate > 0:
         preload_mm = turns * 1.0
         sag_in_eff = (rear_load_lbs * effective_lr / final_rate_for_tuning) - (preload_mm * MM_TO_IN)
         sag_pct_eff = (sag_in_eff / (stroke_mm * MM_TO_IN)) * 100
-        status = "⚠️ Excessive" if turns >= 3.0 else ("⚠️ Too Stiff" if sag_pct_eff < 25 else "✅")
+        
+        status = ""
+        if turns < 1.0:
+            status = "⚠️ < 1.0 Turn"
+        elif turns >= 3.0:
+            status = "⚠️ Excessive"
+        elif sag_pct_eff < 25:
+            status = "⚠️ Too Stiff"
+        else:
+            status = "✅"
+            
         preload_data.append({"Turns": turns, "Sag (%)": f"{sag_pct_eff:.1f}%", "Status": status})
     st.dataframe(pd.DataFrame(preload_data), hide_index=True)
 else:
@@ -502,6 +510,8 @@ else:
 
 st.info("""
 **Disclaimers:**
+* **Preload Adjuster:** Minimum 1.0 turn required to secure spring. Do not run with loose coil.
+* **Damping Required:** Significant spring rate changes (>25 lbs) require Rebound damping adjustment.
 * **Rate Tolerance:** Standard coils vary +/- 5%.
 * **Stroke Compatibility:** Ensure spring stroke > shock stroke to avoid coil bind.
 * **Diameter:** Check spring ID compatibility with your specific shock body.
