@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import datetime
+import numpy as np
 from fpdf import FPDF
 from streamlit_gsheets import GSheetsConnection
 
@@ -9,13 +10,11 @@ from streamlit_gsheets import GSheetsConnection
 # ==========================================================
 st.set_page_config(page_title="MTB Spring Rate Calculator", page_icon="⚙️", layout="centered")
 
-# --- Reset Function ---
 def reset_form():
     for key in st.session_state.keys():
         del st.session_state[key]
     st.rerun()
 
-# --- Initialise Session State ---
 if 'category_select' not in st.session_state:
     st.session_state.category_select = "Enduro"
 
@@ -26,7 +25,6 @@ STONE_TO_KG = 6.35029
 PROGRESSIVE_CORRECTION_FACTOR = 0.97
 EBIKE_WEIGHT_PENALTY_KG = 8.5
 
-# --- Data Tables ---
 CATEGORY_DATA = {
     "Downcountry": {"travel": 115, "stroke": 45.0, "base_sag": 28, "progression": 15, "lr_start": 2.82, "desc": "110–120 mm", "bike_mass_def_kg": 12.0, "bias": 60},
     "Trail": {"travel": 130, "stroke": 50.0, "base_sag": 30, "progression": 19, "lr_start": 2.90, "desc": "120–140 mm", "bike_mass_def_kg": 13.5, "bias": 63},
@@ -231,6 +229,22 @@ with col_k2:
         st.caption(f"Calculated Average Leverage Ratio: **{calc_lr_start:.2f}**")
         st.caption(f"Using category default progression: **{prog_pct:.1f}%**")
     has_hbo = st.checkbox("Shock has HBO?")
+
+# --- VISUALISE LEVERAGE RATIO CURVE ---
+if adv_kinematics and travel_mm > 0:
+    st.subheader("Leverage Ratio Curve")
+    x_travel = np.linspace(0, travel_mm, 50)
+    # Linear interpolation between start and end LR
+    lr_end = calc_lr_start * (1 - (prog_pct / 100))
+    y_lr = np.linspace(calc_lr_start, lr_end, 50)
+    
+    chart_data = pd.DataFrame({
+        "Travel (mm)": x_travel,
+        "Leverage Ratio": y_lr
+    }).set_index("Travel (mm)")
+    
+    st.line_chart(chart_data)
+    st.caption(f"Start: **{calc_lr_start:.2f}** | End: **{lr_end:.2f}** | Progression: **{prog_pct:.1f}%**")
 
 analysis = analyze_spring_compatibility(progression_pct=prog_pct, has_hbo=has_hbo)
 st.subheader("Spring Compatibility")
