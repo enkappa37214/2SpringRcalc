@@ -401,10 +401,24 @@ st.divider(); st.subheader("Configuration Log")
 st.info("Help us improve: By logging your setup, you contribute kinematic data to our global database.")
 flat_log = {
     "Timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-    "Chassis": chassis_type, "Bike_Model": bike_model_log,
-    "Sprung_Mass_Kg": round(sprung_mass_kg, 1), "Unsprung_Mass_Kg": round(unsprung_kg, 1),
-    "Target_Sag_Pct": target_sag, "Calculated_Spring_Rate": int(raw_rate) if raw_rate else 0,
-    "Stroke_mm": round(stroke_mm, 1), "Travel_mm": round(travel_mm, 1)
+    "Chassis": chassis_type,
+    "Bike_Model": bike_model_log,
+    "Frame_Size": size_selected,
+    "Rider_Weight_Kg": round(rider_kg, 1),
+    "Bike_Weight_Kg": round(bike_kg, 1),
+    "Sprung_Mass_Kg": round(rider_kg + gear_kg + bike_kg - unsprung_kg, 1),
+    "Unsprung_Mass_Kg": round(unsprung_kg, 1),
+    "Target_Sag_Pct": target_sag,
+    "Calculated_Spring_Rate": int(raw_rate),
+    "Kinematics_Source": "Database" if is_db_bike else "User Manual",
+    "Bike_Weight_Source": bike_weight_source,
+    "Unsprung_Mass_Source": unsprung_source,
+    "Bias_Setting": f"{final_bias_calc}%",
+    "Travel_mm": round(travel_mm, 1),
+    "Stroke_mm": round(stroke_mm, 1),
+    "Start_LR_Log": round(calc_lr_start, 2),
+    "Progression_Log": round(prog_pct, 1),
+    "Submission_Type": "Verified" if is_db_bike else "User_Contributed"
 }
 
 try:
