@@ -203,8 +203,7 @@ with col_c2:
     if skill_suggestion != 0:
         advice_sign = "+" if skill_suggestion > 0 else ""
         st.info(f"Skill Modifier: {advice_sign}{skill_suggestion}% bias recommended.")
-    else:
-        st.info("Skill Modifier: 0% bias adjustment recommended.")
+    else: st.info("Skill Modifier: 0% bias adjustment recommended.")
 
 # --- KINEMATICS ---
 st.header("3. Shock & Kinematics")
@@ -261,11 +260,12 @@ if raw_rate > 0:
     final_rate_for_tuning = int(round(raw_rate / 25) * 25)
     alt_rates = []
 
-    # --- SPRINDEX LOGIC ---
+    # --- SPRING RECOMMENDATION LOGIC ---
+    st.subheader(f"Recommended Coil Model") # Header added to all
+    
     if "Sprindex" in spring_type_sel:
-        st.subheader("Sprindex Recommendation")
         family = "XC/Trail (55mm)" if stroke_mm <= 55 else "Enduro (65mm)" if stroke_mm <= 65 else "DH (75mm)"
-        st.markdown(f"**Recommended Coil Model:** {family}")
+        st.markdown(f"**Sprindex Model:** {family}")
         ranges = SPRINDEX_DATA[family]["ranges"]
         found_match, gap_neighbors = False, []
         for i, r_str in enumerate(ranges):
@@ -285,23 +285,25 @@ if raw_rate > 0:
             upper_r, high_limit = gap_neighbors[1]
             st.warning(f"Calculated rate ({int(raw_rate)} lbs) falls in a gap.")
             gap_choice = st.radio("Choose option:", [f"Option A: {lower_r} (Plush)", f"Option B: {upper_r} (Supportive)"])
-            # Choosen option logic
+            # Sync final tuning rate with selected option
             final_rate_for_tuning = low_limit if "Option A" in gap_choice else high_limit
 
-        # Center table on chosen option rate
+        # Center Adjustable Settings table on final_rate_for_tuning
         st.markdown("### Comparison of Adjustable Settings")
         step = 5 if family != "DH (75mm)" else 10
         center_sprindex = int(round(final_rate_for_tuning / step) * step)
         for r in [center_sprindex - (2*step), center_sprindex - step, center_sprindex, center_sprindex + step, center_sprindex + (2*step)]:
             if r <= 0: continue
-            # Sag for selected option
             r_sag_pct = ((rear_load_lbs * effective_lr / r) / (stroke_mm * MM_TO_IN)) * 100
             alt_rates.append({"Rate (lbs)": f"{r} lbs", "Resulting Sag": f"{r_sag_pct:.1f}%", "Feel": "Plush" if r < center_sprindex else "Supportive" if r > center_sprindex else "Target"})
     
     else:
-        # --- LINEAR ALTERNATIVES ---
+        # For non-sprindex springs, use classic step logic
+        st.markdown(f"**Coil Type:** {spring_type_sel}")
         if spring_type_sel == "Progressive Coil":
-            st.info(f"Recommended Progressive Rate: **{int(raw_rate)} - {int(raw_rate * 1.15)} lbs/in**")
+            st.info(f"Recommended Range: **{int(raw_rate)} - {int(raw_rate * 1.15)} lbs/in**")
+        else:
+            st.info(f"Standard Rate: **{final_rate_for_tuning} lbs/in**")
         
         st.markdown("### Comparison of Alternative Spring Rates")
         center_rate = int(round(raw_rate / 25) * 25)
@@ -312,8 +314,8 @@ if raw_rate > 0:
     
     st.table(alt_rates)
 
-    # --- FINE TUNING (Sync with Chosen Rate) ---
-    st.subheader(f"Fine Tuning (Preload - {final_rate_for_tuning} lbs spring)")
+    # --- FINE TUNING (Sync with Selection) ---
+    st.subheader(f"Fine Tuning (Preload - {final_rate_for_tuning} lbs spring)") # Label sync
     preload_data = []
     for turns in [0.5, 1.0, 1.5, 2.0, 2.5, 3.0]:
         sag_in = (rear_load_lbs * effective_lr / final_rate_for_tuning) - (turns * 1.0 * MM_TO_IN)
@@ -344,7 +346,7 @@ if raw_rate > 0:
         for row in preload_data:
             pdf.cell(60, 8, str(row["Turns"]), 1); pdf.cell(60, 8, row["Sag (%)"], 1); pdf.cell(60, 8, row["Status"], 1, ln=True)
         pdf.ln(10); pdf.set_font("Arial", 'I', 9)
-        pdf.multi_cell(0, 5, "Engineering Disclaimer: This report provides a theoretical baseline derived from kinematic geometry and static mass properties. Actual spring rate requirements may deviate due to damper valving, friction, and riding loads. Sag measurement is mandatory.")
+        pdf.multi_cell(0, 5, "Engineering Disclaimer: This report provides a theoretical baseline derived from kinematic geometry and static mass properties. Actual requirements may deviate due to damper valving, friction, and dynamic riding loads. Sag measurement is mandatory.")
         return pdf.output(dest="S").encode("latin-1")
     st.download_button(label="Export Results to PDF", data=generate_pdf(), file_name=f"MTB_Spring_Report_{datetime.datetime.now().strftime('%Y%m%d')}.pdf", mime="application/pdf")
 
