@@ -18,6 +18,7 @@ def reset_form():
 if 'category_select' not in st.session_state:
     st.session_state.category_select = "Enduro"
 
+# --- Constants ---
 LB_TO_KG, KG_TO_LB = 0.453592, 2.20462
 IN_TO_MM, MM_TO_IN = 25.4, 1/25.4
 STONE_TO_KG = 6.35029
@@ -119,7 +120,7 @@ with col_title:
 with col_reset:
     st.button("Reset", on_click=reset_form, type="secondary", use_container_width=True)
 
-st.caption("Capability Notice: This tool was built for personal use. If you find an error, please signal the developer.")
+st.caption("Capability Notice: This tool was built for personal use. If you think you're smarter, do your own calculator.")
 
 bike_db = load_bike_database()
 
@@ -205,7 +206,7 @@ with col_c2:
         st.info("Skill Modifier: 0% bias adjustment recommended.")
 
 # ==========================================================
-# 4. KINEMATICS & SPRING SELECTION
+# 4. KINEMATICS
 # ==========================================================
 st.header("3. Shock & Kinematics")
 col_k1, col_k2 = st.columns(2)
@@ -227,9 +228,7 @@ with col_k2:
         calc_lr_start, prog_pct = travel_mm / stroke_mm if stroke_mm > 0 else 0, float(defaults["progression"])
         st.caption(f"Calculated Average Leverage Ratio: {calc_lr_start:.2f}")
         st.caption(f"Using category default progression: {prog_pct:.1f}%")
-    has_hbo = st.checkbox("Shock has HBO?")
 
-# --- LEVERAGE CURVE ---
 if adv_kinematics and travel_mm > 0:
     st.subheader("Leverage Ratio Curve")
     x_travel = np.linspace(0, travel_mm, 50)
@@ -239,18 +238,30 @@ if adv_kinematics and travel_mm > 0:
     st.line_chart(chart_data)
     st.caption(f"Start: {calc_lr_start:.2f} | End: {lr_end:.2f} | Progression: {prog_pct:.1f}%")
 
+# ==========================================================
+# 5. SPRING COMPATIBILITY & SELECTION
+# ==========================================================
+st.header("4. Spring Compatibility & Selection")
 
-analysis = analyze_spring_compatibility(progression_pct=prog_pct, has_hbo=has_hbo)
-st.subheader("Spring Compatibility")
-for s_type, info in analysis.items():
-    st.markdown(f"{info['status']} {s_type}: {info['msg']}")
-
-spring_type = st.selectbox("Select Spring Type", ["Standard Steel (Linear)", "Lightweight Steel/Ti", "Sprindex", "Progressive Coil"])
+with st.container():
+    col_comp, col_sel = st.columns([0.6, 0.4])
+    
+    with col_comp:
+        st.subheader("Analysis")
+        # Shock HBO moved here
+        has_hbo = st.checkbox("Shock has HBO (Hydraulic Bottom Out)?")
+        analysis = analyze_spring_compatibility(progression_pct=prog_pct, has_hbo=has_hbo)
+        for s_type, info in analysis.items():
+            st.markdown(f"**{info['status']} {s_type}**: {info['msg']}")
+            
+    with col_sel:
+        st.subheader("Selection")
+        spring_type = st.selectbox("Select Spring Type", ["Standard Steel (Linear)", "Lightweight Steel/Ti", "Sprindex", "Progressive Coil"])
 
 # ==========================================================
-# 5. CALCULATIONS & RESULTS
+# 6. CALCULATIONS & RESULTS
 # ==========================================================
-st.header("4. Setup Preferences")
+st.header("5. Setup Preferences")
 target_sag = st.slider("Target Sag (%)", 20.0, 40.0, float(defaults["base_sag"]), 0.5)
 
 total_drop = (calc_lr_start - (calc_lr_start * (1 - (prog_pct/100))))
@@ -318,7 +329,7 @@ if raw_rate > 0:
     st.download_button(label="Export Results to PDF", data=generate_pdf(), file_name=f"MTB_Spring_Report_{datetime.datetime.now().strftime('%Y%m%d')}.pdf", mime="application/pdf")
 
 # ==========================================================
-# 6. LOGGING & REVIEW
+# 7. LOGGING & REVIEW
 # ==========================================================
 st.divider()
 st.subheader("Configuration Log")
