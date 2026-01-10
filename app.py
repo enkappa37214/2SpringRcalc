@@ -178,23 +178,22 @@ defaults = CATEGORY_DATA[category]
 
 col_c1, col_c2 = st.columns(2)
 with col_c1:
-    # 1. FIXED BIKE WEIGHT LOGIC WITH FRAME SIZE IN BOTH MODES
+    # 1. BIKE WEIGHT LOGIC
     weight_mode = st.radio("Bike Weight Mode", ["Manual Input", "Estimate"], horizontal=True)
     if weight_mode == "Estimate":
         mat = st.selectbox("Frame Material", ["Carbon", "Aluminium"])
         level = st.selectbox("Build Level", ["Entry-Level", "Mid-Level", "High-End"])
-        f_size = st.selectbox("Size", list(SIZE_WEIGHT_MODS.keys()), index=2) # Frame size select
+        f_size = st.selectbox("Size", list(SIZE_WEIGHT_MODS.keys()), index=2) 
         base = BIKE_WEIGHT_EST[category][mat][{"Entry-Level": 0, "Mid-Level": 1, "High-End": 2}[level]]
         bike_kg = float(base + SIZE_WEIGHT_MODS[f_size] + (EBIKE_WEIGHT_PENALTY_KG if is_ebike else 0.0))
         bike_weight_source = f"Estimate ({mat}/{level})"
     else:
-        # Added Frame Size for manual input mode
         f_size = st.selectbox("Frame Size", list(SIZE_WEIGHT_MODS.keys()), index=2) 
         bike_input = st.number_input(f"Bike Weight ({u_mass_label})", 7.0, 45.0, float(defaults["bike_mass_def_kg"]) + (EBIKE_WEIGHT_PENALTY_KG if is_ebike else 0.0))
         bike_kg = float(bike_input * LB_TO_KG if unit_mass == "North America (lbs)" else bike_input)
         bike_weight_source = "Manual"
         
-    # --- Unsprung Mass Source Logic ---
+    # 2. UNSPRUNG MASS LOGIC (FIXED)
     unsprung_mode = st.toggle("Estimate Unsprung Mass", value=False)
     if unsprung_mode:
         u_tier = st.selectbox("Wheelset Tier", ["Light", "Standard", "Heavy"], index=1)
@@ -203,10 +202,14 @@ with col_c1:
         wheels = {"Light": 1.7, "Standard": 2.3, "Heavy": 3.0}[u_tier]
         swingarm = 0.4 if u_mat == "Carbon" else 0.7
         unsprung_kg = 1.0 + wheels + swingarm + (0.5 if inserts else 0.0) + (1.5 if is_ebike else 0.0)
+        # Define source for logging
+        unsprung_source = f"Estimate ({u_tier}/{u_mat})" 
         st.caption(f"Estimated unsprung: {unsprung_kg:.2f} kg")
     else:
         unsprung_input = st.number_input(f"Unsprung ({u_mass_label})", 0.0, 25.0, 4.27 + (2.0 if is_ebike else 0.0), 0.1)
-        unsprung_kg = unsprung_input * LB_TO_KG if unit_mass == "North America (lbs)" else unsprung_input
+        unsprung_kg = float(unsprung_input * LB_TO_KG if unit_mass == "North America (lbs)" else unsprung_input)
+        # Define source for logging to prevent NameError
+        unsprung_source = "Manual"
 
 with col_c2:
     if 'rear_bias_slider' not in st.session_state: st.session_state.rear_bias_slider = defaults["bias"]
