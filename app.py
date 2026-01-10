@@ -333,7 +333,18 @@ if raw_rate > 0:
             r_sag_pct = ((rear_load_lbs * effective_lr / r) / (stroke_mm * MM_TO_IN)) * 100
             alt_rates.append({"Rate (lbs)": f"{r} lbs", "Resulting Sag": f"{r_sag_pct:.1f}%", "Feel": "Plush" if r < center_sprindex else "Supportive" if r > center_sprindex else "Target"})
     else:
-        spring_size_display = stroke_mm + 5 if unit_len == "Millimetres (mm)" else (stroke_mm * MM_TO_IN) + 0.25
+        # Map shock stroke to standard spring stroke availability
+        standard_spring_strokes = [55, 60, 65, 75]
+        
+        # Find the first standard size that is greater than or equal to the shock stroke
+        # Defaults to 75 if stroke exceeds standard options
+        required_stroke_mm = next((s for s in standard_spring_strokes if s >= stroke_mm), 75)
+        
+        if unit_len == "Inches (\")":
+            spring_size_display = required_stroke_mm * MM_TO_IN
+        else:
+            spring_size_display = float(required_stroke_mm)
+
         st.markdown(f"**Required Spring Size:** {spring_size_display:.2f} {u_len_label} Stroke")
         center_rate = int(round(raw_rate / 25) * 25)
         for r in [center_rate - 50, center_rate - 25, center_rate, center_rate + 25, center_rate + 50]:
