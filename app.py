@@ -157,7 +157,8 @@ with col_toggle: manual_entry_mode = st.checkbox("Bike not listed?", help="Selec
 with col_search:
     if not manual_entry_mode:
         if not bike_db.empty:
-            selected_model = st.selectbox("Select Bike Model (Auto-Fill)", list(bike_db['Model'].unique()), index=None, placeholder="Type to search...", key='bike_selector', on_change=update_category_from_bike)
+            # Modified Label
+            selected_model = st.selectbox("Select Bike Model (Auto-Fill Shock & Advanced Kinematics)", list(bike_db['Model'].unique()), index=None, placeholder="Type to search...", key='bike_selector', on_change=update_category_from_bike)
             if selected_model:
                 selected_bike_data, is_db_bike, bike_model_log = bike_db[bike_db['Model'] == selected_model].iloc[0], True, selected_model
                 st.success(f"Verified Model Loaded: {selected_model}")
@@ -187,13 +188,7 @@ with col_c1:
         frame_size_log = st.selectbox("Frame Size", list(SIZE_WEIGHT_MODS.keys()), index=2)
         bike_kg = st.number_input("Bike Weight (kg)", 7.0, 36.0, defaults["bike_mass_def_kg"] + (EBIKE_WEIGHT_PENALTY_KG if is_ebike else 0.0), 0.1)
     
-    unsprung_mode = st.toggle("Estimate Unsprung Mass", value=False)
-    if unsprung_mode:
-        u_tier = st.selectbox("Wheelset Tier", ["Light", "Standard", "Heavy"], index=1)
-        u_mat = st.selectbox("Rear Triangle", ["Carbon", "Aluminium"], index=1)
-        unsprung_kg = estimate_unsprung(u_tier, u_mat, st.checkbox("Tyre Inserts?"), is_ebike)
-    else:
-        unsprung_kg = st.number_input("Unsprung (kg)", 0.0, 25.0, 4.27 + (2.0 if is_ebike else 0.0), 0.01)
+    unsprung_kg = st.number_input("Unsprung (kg)", 0.0, 25.0, 4.27 + (2.0 if is_ebike else 0.0), 0.01)
 
 with col_c2:
     if 'rear_bias_slider' not in st.session_state: st.session_state.rear_bias_slider = defaults["bias"]
@@ -208,7 +203,8 @@ with col_c2:
     if skill_suggestion != 0:
         advice_sign = "+" if skill_suggestion > 0 else ""
         st.info(f"Skill Modifier: {advice_sign}{skill_suggestion}% bias recommended.")
-    else: st.info("Skill Modifier: 0% bias adjustment recommended.")
+    else:
+        st.info("Skill Modifier: 0% bias adjustment recommended.")
 
 # --- KINEMATICS ---
 st.header("3. Shock & Kinematics")
@@ -289,14 +285,16 @@ if raw_rate > 0:
             upper_r, high_limit = gap_neighbors[1]
             st.warning(f"Calculated rate ({int(raw_rate)} lbs) falls in a gap.")
             gap_choice = st.radio("Choose option:", [f"Option A: {lower_r} (Plush)", f"Option B: {upper_r} (Supportive)"])
+            # Choosen option logic
             final_rate_for_tuning = low_limit if "Option A" in gap_choice else high_limit
 
-        # --- SPRINDEX SPECIFIC ALTERNATIVES ---
+        # Center table on chosen option rate
         st.markdown("### Comparison of Adjustable Settings")
         step = 5 if family != "DH (75mm)" else 10
-        center_sprindex = int(round(raw_rate / step) * step)
+        center_sprindex = int(round(final_rate_for_tuning / step) * step)
         for r in [center_sprindex - (2*step), center_sprindex - step, center_sprindex, center_sprindex + step, center_sprindex + (2*step)]:
             if r <= 0: continue
+            # Sag for selected option
             r_sag_pct = ((rear_load_lbs * effective_lr / r) / (stroke_mm * MM_TO_IN)) * 100
             alt_rates.append({"Rate (lbs)": f"{r} lbs", "Resulting Sag": f"{r_sag_pct:.1f}%", "Feel": "Plush" if r < center_sprindex else "Supportive" if r > center_sprindex else "Target"})
     
@@ -314,8 +312,8 @@ if raw_rate > 0:
     
     st.table(alt_rates)
 
-    # --- FINE TUNING ---
-    st.subheader("Fine Tuning (Preload)")
+    # --- FINE TUNING (Sync with Chosen Rate) ---
+    st.subheader(f"Fine Tuning (Preload - {final_rate_for_tuning} lbs spring)")
     preload_data = []
     for turns in [0.5, 1.0, 1.5, 2.0, 2.5, 3.0]:
         sag_in = (rear_load_lbs * effective_lr / final_rate_for_tuning) - (turns * 1.0 * MM_TO_IN)
@@ -346,7 +344,7 @@ if raw_rate > 0:
         for row in preload_data:
             pdf.cell(60, 8, str(row["Turns"]), 1); pdf.cell(60, 8, row["Sag (%)"], 1); pdf.cell(60, 8, row["Status"], 1, ln=True)
         pdf.ln(10); pdf.set_font("Arial", 'I', 9)
-        pdf.multi_cell(0, 5, "Engineering Disclaimer: This report provides a theoretical baseline. Actual requirements may deviate due to damper valving, friction, and riding loads. Sag measurement is mandatory.")
+        pdf.multi_cell(0, 5, "Engineering Disclaimer: This report provides a theoretical baseline derived from kinematic geometry and static mass properties. Actual spring rate requirements may deviate due to damper valving, friction, and riding loads. Sag measurement is mandatory.")
         return pdf.output(dest="S").encode("latin-1")
     st.download_button(label="Export Results to PDF", data=generate_pdf(), file_name=f"MTB_Spring_Report_{datetime.datetime.now().strftime('%Y%m%d')}.pdf", mime="application/pdf")
 
