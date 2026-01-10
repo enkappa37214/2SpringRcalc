@@ -189,6 +189,7 @@ with col_c1:
         bike_kg = base + SIZE_WEIGHT_MODS[size] + (EBIKE_WEIGHT_PENALTY_KG if is_ebike else 0.0)
         st.caption(f"Estimated weight: {bike_kg:.2f} kg")
     else:
+        size_selected = st.selectbox("Frame Size", list(SIZE_WEIGHT_MODS.keys()), index=2)
         bike_input = st.number_input(f"Bike Weight ({u_mass_label})", 7.0, 45.0, defaults["bike_mass_def_kg"] + (EBIKE_WEIGHT_PENALTY_KG if is_ebike else 0.0), 0.1)
         bike_kg = bike_input * LB_TO_KG if unit_mass == "North America (lbs)" else bike_input
 
