@@ -144,67 +144,62 @@ with col_r2:
     gear_kg = gear_in * LB_TO_KG if "lbs" in unit_mass else gear_in
 
 # ==========================================================
-# 5. CHASSIS DATA
+# 5. CHASSIS DATA (ENHANCED UX)
 # ==========================================================
 st.header("2. Chassis Data")
 chassis_type = st.radio("Chassis Configuration", ["Analog Bike", "E-Bike"], horizontal=True)
 is_ebike = (chassis_type == "E-Bike")
 
+# --- DATABASE SELECTION ---
 selected_bike_data = None
 is_db_bike = False
 bike_model_log = ""
 
-if not bike_db.empty:
-    bike_models = list(bike_db['Model'].unique())
-    bike_models.append("Model Not Found - Add New") #
+# Path A: User looks for an existing bike
+col_search, col_toggle = st.columns([0.7, 0.3])
+
+with col_toggle:
+    # Explicit toggle makes it intuitive when search yields no results
+    manual_entry_mode = st.checkbox("Bike not listed?", help="Select this to manually add a new model to our database.")
+
+with col_search:
+    if not manual_entry_mode:
+        if not bike_db.empty:
+            bike_models = list(bike_db['Model'].unique())
+            selected_model = st.selectbox(
+                "🚲 Select Bike Model (Auto-Fill)", 
+                bike_models, 
+                index=None, 
+                placeholder="Type to search...", 
+                key='bike_selector', 
+                on_change=update_category_from_bike
+            )
+            
+            if selected_model:
+                selected_bike_data = bike_db[bike_db['Model'] == selected_model].iloc[0]
+                is_db_bike = True
+                bike_model_log = selected_model
+        else:
+            st.warning("Database unavailable. Manual entry enabled.")
+            manual_entry_mode = True
+
+# Path B: User adds a new bike (Form appears below)
+if manual_entry_mode:
+    st.info("🛠️ **Community Contribution:** Enter your bike details below. These stats will be reviewed for our global database.")
+    col_new1, col_new2, col_new3 = st.columns(3)
+    with col_new1: new_year = st.number_input("Year", 2010, 2026, 2025)
+    with col_new2: new_brand = st.text_input("Brand", placeholder="e.g. SANTA CRUZ")
+    with col_new3: new_name = st.text_input("Model", placeholder="e.g. NOMAD")
     
-    selected_model = st.selectbox("🚲 Select Bike Model (Auto-Fill)", bike_models, index=None, placeholder="Type to search...", key='bike_selector', on_change=update_category_from_bike)
+    # Standardise the name for the spreadsheet
+    if new_brand and new_name:
+        bike_model_log = f"{new_year} {new_brand.upper()} {new_name.upper()}"
+    else:
+        bike_model_log = "User Contribution Pending"
     
-    if selected_model == "Model Not Found - Add New": #
-        st.info("Please enter your bike details below to help enrich our community database.")
-        col_new1, col_new2, col_new3 = st.columns(3)
-        with col_new1: new_year = st.number_input("Year", 2010, 2026, 2025) #
-        with col_new2: new_brand = st.text_input("Brand", placeholder="e.g. Specialized") #
-        with col_new3: new_name = st.text_input("Model", placeholder="e.g. Enduro") #
-        bike_model_log = f"{new_year} {new_brand.upper()} {new_name.upper()}".strip() #
-        is_db_bike = False
-    elif selected_model:
-        selected_bike_data = bike_db[bike_db['Model'] == selected_model].iloc[0]
-        is_db_bike = True
-        bike_model_log = selected_model
-    else:
-        bike_model_log = "Generic/Manual"
-
-category = st.selectbox("Category", list(CATEGORY_DATA.keys()), format_func=lambda x: f"{x} ({CATEGORY_DATA[x]['desc']})", key='category_select', index=3, on_change=update_bias_from_category)
-defaults = CATEGORY_DATA[category]
-
-col_c1, col_c2 = st.columns(2)
-with col_c1:
-    weight_mode = st.radio("Bike Weight Mode", ["Manual Input", "Estimate"], index=0, horizontal=True)
-    if weight_mode == "Estimate":
-        mat = st.selectbox("Frame Material", ["Carbon", "Aluminium"])
-        level = st.selectbox("Build Level", ["Entry-Level", "Mid-Level", "High-End"])
-        size = st.selectbox("Size", list(SIZE_WEIGHT_MODS.keys()), index=2)
-        base_w = BIKE_WEIGHT_EST[category][mat][{"Entry-Level": 0, "Mid-Level": 1, "High-End": 2}[level]]
-        bike_kg = base_w + SIZE_WEIGHT_MODS[size] + (EBIKE_WEIGHT_PENALTY_KG if is_ebike else 0.0)
-        frame_size_log = size
-    else:
-        frame_size_log = st.selectbox("Frame Size", list(SIZE_WEIGHT_MODS.keys()), index=2)
-        bike_kg = st.number_input("Bike Weight (kg)", 7.0, 36.0, defaults["bike_mass_def_kg"] + (EBIKE_WEIGHT_PENALTY_KG if is_ebike else 0.0), 0.1)
-
-with col_c2:
-    if 'rear_bias_slider' not in st.session_state: st.session_state.rear_bias_slider = defaults["bias"]
-    final_bias_calc = st.slider("Rear Bias (%)", 55, 75, key="rear_bias_slider")
-
-# Unsprung Mass
-with col_c1:
-    unsprung_mode = st.toggle("Estimate Unsprung Mass", value=False)
-    if unsprung_mode:
-        u_tier = st.selectbox("Wheelset Tier", ["Light", "Standard", "Heavy"], index=1)
-        u_mat = st.selectbox("Rear Triangle", ["Carbon", "Aluminium"], index=1)
-        unsprung_kg = estimate_unsprung(u_tier, u_mat, st.checkbox("Tyre Inserts?"), is_ebike)
-    else:
-        unsprung_kg = st.number_input("Unsprung (kg)", 0.0, 25.0, 4.27 + (2.0 if is_ebike else 0.0), 0.01)
+    is_db_bike = False
+    # Force Advanced Kinematics to ensure we get Start/End LR data for the DB
+    st.session_state.adv_kinematics = True
 
 # ==========================================================
 # 6. SHOCK & KINEMATICS
