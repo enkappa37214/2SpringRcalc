@@ -410,7 +410,6 @@ flat_log = {
     "Target_Sag_Pct": target_sag,
     "Calculated_Spring_Rate": int(raw_rate),
     "Kinematics_Source": "Database" if is_db_bike else "User Manual",
-    "Unsprung_Mass_Source": unsprung_source,
     "Bias_Setting": f"{final_bias_calc}%",
     "Travel_mm": round(travel_mm, 1),
     "Stroke_mm": round(stroke_mm, 1),
