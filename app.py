@@ -10,10 +10,10 @@ from streamlit_gsheets import GSheetsConnection
 # ==========================================================
 st.set_page_config(page_title="MTB Spring Rate Calculator", page_icon="⚙️", layout="centered")
 
-def reset_form():
+# State management for reset functionality
+def reset_form_callback():
     for key in st.session_state.keys():
         del st.session_state[key]
-    st.rerun()
 
 if 'category_select' not in st.session_state:
     st.session_state.category_select = "Enduro"
@@ -24,7 +24,7 @@ IN_TO_MM, MM_TO_IN = 25.4, 1/25.4
 STONE_TO_KG = 6.35029
 PROGRESSIVE_CORRECTION_FACTOR = 0.97
 EBIKE_WEIGHT_PENALTY_KG = 8.5
-COMMON_STROKES = [37.5, 40.0, 42.5, 45.0, 50.0, 52.5, 55.0, 57.5, 60.0, 62.5, 65.0, 70.0, 75.0]
+COMMON_STROKES = [45, 50, 55, 57.5, 60, 62.5, 65, 70, 75] #
 
 CATEGORY_DATA = {
     "Downcountry": {"travel": 115, "stroke": 45.0, "base_sag": 28, "progression": 15, "lr_start": 2.82, "desc": "110–120 mm", "bike_mass_def_kg": 12.0, "bias": 60},
@@ -35,19 +35,11 @@ CATEGORY_DATA = {
     "Enduro (Race focus)": {"travel": 165, "stroke": 62.5, "base_sag": 32, "progression": 26, "lr_start": 3.13, "desc": "160–170 mm", "bike_mass_def_kg": 15.8, "bias": 68},
     "Downhill (DH)": {"travel": 200, "stroke": 72.5, "base_sag": 35, "progression": 28, "lr_start": 3.28, "desc": "180–210 mm", "bike_mass_def_kg": 17.5, "bias": 72}
 }
+
 SKILL_MODIFIERS = {"Just starting": {"bias": +4}, "Beginner": {"bias": +2}, "Intermediate": {"bias": 0}, "Advanced": {"bias": -1}, "Racer": {"bias": -2}}
 SKILL_LEVELS = list(SKILL_MODIFIERS.keys())
 COUPLING_COEFFS = {"Downcountry": 0.80, "Trail": 0.75, "All-Mountain": 0.70, "Enduro": 0.72, "Long Travel Enduro": 0.90, "Enduro (Race focus)": 0.78, "Downhill (DH)": 0.95}
-SIZE_WEIGHT_MODS = {"XS": -0.5, "S": -0.25, "M": 0.0, "L": 0.3, "XL": 0.6, "XXL": 0.95}
-BIKE_WEIGHT_EST = {
-    "Downcountry": {"Carbon": [12.2, 11.4, 10.4], "Aluminium": [13.8, 13.1, 12.5]},
-    "Trail": {"Carbon": [14.1, 13.4, 12.8], "Aluminium": [15.4, 14.7, 14.0]},
-    "All-Mountain": {"Carbon": [15.0, 14.2, 13.5], "Aluminium": [16.2, 15.5, 14.8]},
-    "Enduro": {"Carbon": [16.2, 15.5, 14.8], "Aluminium": [17.5, 16.6, 15.8]},
-    "Long Travel Enduro": {"Carbon": [16.8, 16.0, 15.2], "Aluminium": [18.0, 17.2, 16.5]},
-    "Enduro (Race focus)": {"Carbon": [16.0, 15.2, 14.5], "Aluminium": [17.2, 16.3, 15.5]},
-    "Downhill (DH)": {"Carbon": [17.8, 17.0, 16.2], "Aluminium": [19.5, 18.5, 17.5]}
-}
+
 SPRINDEX_DATA = {
     "XC/Trail (55mm)": {"max_stroke": 55, "ranges": ["380-430", "430-500", "490-560", "550-610", "610-690", "650-760"]},
     "Enduro (65mm)": {"max_stroke": 65, "ranges": ["340-380", "390-430", "450-500", "500-550", "540-610", "610-700"]},
@@ -110,7 +102,9 @@ col_title, col_reset = st.columns([0.8, 0.2])
 with col_title:
     st.title("MTB Spring Rate Calculator")
 with col_reset:
-    st.button("Reset", on_click=reset_form, type="secondary", use_container_width=True)
+    # Reset logic fix
+    if st.button("Reset", on_click=reset_form_callback, type="secondary", use_container_width=True):
+        st.rerun()
 
 st.caption("Capability Notice: This tool was built for personal use. If you think you're smarter, do your own calculator.")
 
@@ -121,7 +115,6 @@ with st.expander("Settings & Units"):
     with col_u1: unit_mass = st.radio("Mass Units", ["Global (kg)", "North America (lbs)", "UK Hybrid (st & kg)"])
     with col_u2: unit_len = st.radio("Length Units", ["Millimetres (mm)", "Inches (\")"])
 
-# Dynamic unit labels
 u_mass_label = "lbs" if unit_mass == "North America (lbs)" else "kg"
 u_len_label = "in" if unit_len == "Inches (\")" else "mm"
 
@@ -150,84 +143,91 @@ is_ebike = (chassis_type == "E-Bike")
 
 selected_bike_data, is_db_bike, bike_model_log = None, False, ""
 col_search, col_toggle = st.columns([0.7, 0.3])
-with col_toggle: manual_entry_mode = st.checkbox("Bike not listed?", help="Select to manually add a model to the database.")
+# UI label update
+with col_toggle: manual_entry_mode = st.checkbox("Add my bike")
 
 with col_search:
     if not manual_entry_mode:
         if not bike_db.empty:
-            selected_model = st.selectbox("Select Bike Model (Auto-Fill Shock & Advanced Kinematics)", list(bike_db['Model'].unique()), index=None, placeholder="Type to search...", key='bike_selector', on_change=update_category_from_bike)
+            selected_model = st.selectbox("Select Bike Model", list(bike_db['Model'].unique()), index=None, placeholder="Type to search...", key='bike_selector', on_change=update_category_from_bike)
+            # Instructional sub-text
+            st.caption("If your bike is not available you can either leave field empty or choose to help enrich the global database by adding details about your bike.")
             if selected_model:
                 selected_bike_data, is_db_bike, bike_model_log = bike_db[bike_db['Model'] == selected_model].iloc[0], True, selected_model
-                st.success(f"Verified Model Loaded: {selected_model}")
         else: manual_entry_mode = True
-
-if manual_entry_mode:
-    st.info("Community Contribution: Enter details below to help enrich the global database.")
-    col_new1, col_new2, col_new3 = st.columns(3)
-    with col_new1: new_year = st.number_input("Year", 2010, 2026, 2025)
-    with col_new2: new_brand = st.text_input("Brand", placeholder="e.g. SANTA CRUZ")
-    with col_new3: new_name = st.text_input("Model", placeholder="e.g. NOMAD")
-    bike_model_log = f"{new_year} {new_brand.upper()} {new_name.upper()}".strip()
-    if not bike_db.empty and bike_model_log in bike_db['Model'].values:
-        st.warning(f"Duplicate Detected: '{bike_model_log}' already exists.")
 
 category = st.selectbox("Category", list(CATEGORY_DATA.keys()), format_func=lambda x: f"{x} ({CATEGORY_DATA[x]['desc']})", key='category_select', on_change=update_bias_from_category)
 defaults = CATEGORY_DATA[category]
 
 col_c1, col_c2 = st.columns(2)
 with col_c1:
-    weight_mode = st.radio("Bike Weight Mode", ["Manual Input", "Estimate"], horizontal=True)
-    if weight_mode == "Estimate":
-        mat, level, size = st.selectbox("Frame Material", ["Carbon", "Aluminium"]), st.selectbox("Build Level", ["Entry-Level", "Mid-Level", "High-End"]), st.selectbox("Size", list(SIZE_WEIGHT_MODS.keys()), index=2)
-        bike_kg = BIKE_WEIGHT_EST[category][mat][{"Entry-Level": 0, "Mid-Level": 1, "High-End": 2}[level]] + SIZE_WEIGHT_MODS[size] + (EBIKE_WEIGHT_PENALTY_KG if is_ebike else 0.0)
-        frame_size_log = size
-    else:
-        frame_size_log = st.selectbox("Frame Size", list(SIZE_WEIGHT_MODS.keys()), index=2)
-        bike_input = st.number_input(f"Bike Weight ({u_mass_label})", 7.0, 45.0, defaults["bike_mass_def_kg"] + (EBIKE_WEIGHT_PENALTY_KG if is_ebike else 0.0), 0.1)
-        bike_kg = bike_input * LB_TO_KG if unit_mass == "North America (lbs)" else bike_input
-    
+    bike_input = st.number_input(f"Bike Weight ({u_mass_label})", 7.0, 45.0, defaults["bike_mass_def_kg"] + (EBIKE_WEIGHT_PENALTY_KG if is_ebike else 0.0), 0.1)
+    bike_kg = bike_input * LB_TO_KG if unit_mass == "North America (lbs)" else bike_input
     unsprung_input = st.number_input(f"Unsprung Weight ({u_mass_label})", 0.0, 25.0, 4.27 + (2.0 if is_ebike else 0.0), 0.01)
     unsprung_kg = unsprung_input * LB_TO_KG if unit_mass == "North America (lbs)" else unsprung_input
 
 with col_c2:
     if 'rear_bias_slider' not in st.session_state: st.session_state.rear_bias_slider = defaults["bias"]
-    st.markdown("### Rear Bias (%)")
+    
+    # Enhanced weight distribution feedback
+    st.markdown("### Weight Distribution Test")
+    st.text(f"Category Base Bias: {defaults['bias']}%")
+    st.text(f"Skill Adjustment: {SKILL_MODIFIERS[skill]['bias']:+d}% ({skill})")
+    
     final_bias_calc = st.slider("Rear Bias (%)", 55, 80, key="rear_bias_slider", label_visibility="collapsed")
     total_system_kg = rider_kg + gear_kg + bike_kg
     
-    # FIX 1: Bias applied to sprung mass only
+    # Physics fix: bias applied to sprung mass only
     sprung_mass_kg = total_system_kg - unsprung_kg
     rear_val_kg = (sprung_mass_kg * (final_bias_calc/100)) + (unsprung_kg if final_bias_calc > 0 else 0)
     
-    st.info(f"Weight Distribution Test: Front **{(total_system_kg - rear_val_kg):.1f}{u_mass_label}** | Rear **{rear_val_kg:.1f}{u_mass_label}**")
+    st.info(f"Front: {(total_system_kg - rear_val_kg):.1f}{u_mass_label} | Rear: {rear_val_kg:.1f}{u_mass_label}")
 
 # --- KINEMATICS ---
 st.header("3. Shock & Kinematics")
 col_k1, col_k2 = st.columns(2)
+
+# Travel default fix
 if is_db_bike:
     raw_travel, raw_stroke, raw_prog, raw_lr_start = float(selected_bike_data['Travel_mm']), float(selected_bike_data['Shock_Stroke']), float(selected_bike_data['Progression_Pct']), float(selected_bike_data['Start_Leverage'])
 else:
-    raw_travel, raw_stroke, raw_prog, raw_lr_start = defaults["travel"], defaults["stroke"], float(defaults["progression"]), float(defaults["lr_start"])
+    raw_travel, raw_stroke, raw_prog, raw_lr_start = 165.0, defaults["stroke"], float(defaults["progression"]), float(defaults["lr_start"])
 
 with col_k1:
     travel_in = st.number_input(f"Rear Travel ({u_len_label})", 0.0, 300.0, float(raw_travel if unit_len == "Millimetres (mm)" else raw_travel * MM_TO_IN), 1.0)
-    # FIX 2: Stroke locked for DB bikes
-    stroke_in = st.number_input(f"Shock Stroke ({u_len_label})", 1.5, 100.0, float(raw_stroke if unit_len == "Millimetres (mm)" else raw_stroke * MM_TO_IN), 0.5, disabled=is_db_bike)
+    
+    # Stroke selectbox update
+    if unit_len == "Inches (\")":
+        stroke_in = st.number_input(f"Shock Stroke ({u_len_label})", 1.5, 5.0, raw_stroke * MM_TO_IN, 0.1, disabled=is_db_bike)
+        stroke_mm = stroke_in * IN_TO_MM
+    else:
+        stroke_mm = st.selectbox(f"Shock Stroke ({u_len_label})", COMMON_STROKES, index=COMMON_STROKES.index(raw_stroke) if raw_stroke in COMMON_STROKES else 4, disabled=is_db_bike)
+    
     travel_mm = travel_in * IN_TO_MM if unit_len == "Inches (\")" else travel_in
-    stroke_mm = stroke_in * IN_TO_MM if unit_len == "Inches (\")" else stroke_in
 
 calc_lr_start = travel_mm / stroke_mm if stroke_mm > 0 else 0
 
 with col_k2:
-    adv_kinematics = st.checkbox("Advanced Kinematics", value=(is_db_bike or manual_entry_mode))
-    if adv_kinematics:
-        lr_start, prog_pct = st.number_input("LR Start Rate", 1.5, 4.0, raw_lr_start, 0.05), st.number_input("Progression (%)", -10.0, 60.0, raw_prog, 1.0)
-        calc_lr_start = lr_start
-    else:
+    adv_kinematics = st.checkbox("Advanced Kinematics", value=is_db_bike)
+    
+    # Conditional informational block for basic mode
+    if not adv_kinematics:
+        st.container()
+        st.markdown(f"""
+        **Kinematic Summary (Basic Mode):**
+        * System Leverage Ratio: ${travel_mm/stroke_mm:.2f}:1$ (derived from ${travel_mm:.0f}mm \div {stroke_mm:.1f}mm$).
+        * Assumed Progression: ${defaults['progression']}\%$ (standard for {category} category).
+        """)
         prog_pct = float(defaults["progression"])
+    else:
+        lr_start = st.number_input("LR Start Rate", 1.5, 4.0, raw_lr_start, 0.05)
+        prog_pct = st.number_input("Progression (%)", -10.0, 60.0, raw_prog, 1.0)
+        calc_lr_start = lr_start
 
 # --- SPRING SELECTION ---
 st.header("4. Spring Compatibility & Selection")
+target_sag = st.slider("Target Sag (%)", 20.0, 40.0, float(defaults["base_sag"]), 0.5)
+
 with st.container():
     col_comp, col_sel = st.columns([0.6, 0.4])
     with col_comp:
@@ -240,14 +240,6 @@ with st.container():
         st.subheader("Selection")
         spring_list = ["Standard Steel (Linear)", "Lightweight Steel/Ti (linear)", "Sprindex (20% end progression)", "Progressive Spring"]
         spring_type_sel = st.selectbox("Select Spring Type", spring_list)
-        
-        if "Progressive" in spring_type_sel and "Caution Avoid" in analysis["Progressive"]["status"]:
-            st.warning("⚠️ Disclaimer: High frame progression risk.")
-        elif "Linear" in spring_type_sel and "Caution" in analysis["Linear"]["status"]:
-            st.warning("⚠️ Disclaimer: Low frame progression risk.")
-
-st.header("5. Setup Preferences")
-target_sag = st.slider("Target Sag (%)", 20.0, 40.0, float(defaults["base_sag"]), 0.5)
 
 # ==========================================================
 # 4. CALCULATIONS
@@ -255,10 +247,8 @@ target_sag = st.slider("Target Sag (%)", 20.0, 40.0, float(defaults["base_sag"])
 total_drop = calc_lr_start * (prog_pct / 100)
 effective_lr = calc_lr_start - (total_drop * (target_sag / 100)) if adv_kinematics else travel_mm / stroke_mm
 eff_rider_kg = rider_kg + (gear_kg * COUPLING_COEFFS[category])
-
-# FIX 1 continued: Correct rear load derivation
+# Physics correction: Unsprung mass handling
 rear_load_lbs = max(0, (sprung_mass_kg * (final_bias_calc / 100))) * KG_TO_LB
-
 raw_rate = (rear_load_lbs * effective_lr) / (stroke_mm * (target_sag / 100) * MM_TO_IN) if stroke_mm > 0 else 0
 if spring_type_sel == "Progressive Spring": raw_rate *= PROGRESSIVE_CORRECTION_FACTOR
 
@@ -267,6 +257,8 @@ if spring_type_sel == "Progressive Spring": raw_rate *= PROGRESSIVE_CORRECTION_F
 # ==========================================================
 st.divider()
 st.header("Results")
+
+
 if raw_rate > 0:
     res_c1, res_c2 = st.columns(2)
     res_c1.metric("Calculated spring rate", f"{int(raw_rate)} lbs/in")
@@ -277,8 +269,6 @@ if raw_rate > 0:
     final_rate_for_tuning = int(round(raw_rate / 25) * 25)
     alt_rates = []
 
-    st.subheader(f"Recommended Spring Model")
-    
     if "Sprindex" in spring_type_sel:
         family = "XC/Trail (55mm)" if stroke_mm <= 55 else "Enduro (65mm)" if stroke_mm <= 65 else "DH (75mm)"
         ranges = SPRINDEX_DATA[family]["ranges"]
@@ -301,26 +291,15 @@ if raw_rate > 0:
             final_rate_for_tuning = gap_neighbors[0][1] if "Option A" in gap_choice else gap_neighbors[1][1]
         
         st.markdown(f"**Sprindex Model:** {family} ({chosen_range} lbs)")
-
-        st.markdown("### Comparison of Adjustable Settings")
         step = 5 if family != "DH (75mm)" else 10
         center_sprindex = int(round(final_rate_for_tuning / step) * step)
         for r in [center_sprindex - (2*step), center_sprindex - step, center_sprindex, center_sprindex + step, center_sprindex + (2*step)]:
             if r <= 0: continue
             r_sag_pct = ((rear_load_lbs * effective_lr / r) / (stroke_mm * MM_TO_IN)) * 100
             alt_rates.append({"Rate (lbs)": f"{r} lbs", "Resulting Sag": f"{r_sag_pct:.1f}%", "Feel": "Plush" if r < center_sprindex else "Supportive" if r > center_sprindex else "Target"})
-    
     else:
         spring_size_display = stroke_mm + 5 if unit_len == "Millimetres (mm)" else (stroke_mm * MM_TO_IN) + 0.25
-        st.markdown(f"**Selected Spring Type:** {spring_type_sel}")
         st.markdown(f"**Required Spring Size:** {spring_size_display:.2f} {u_len_label} Stroke")
-        
-        if spring_type_sel == "Progressive Spring":
-            st.info(f"Recommended Range: **{int(raw_rate)} - {int(raw_rate * 1.15)} lbs/in**")
-        else:
-            st.info(f"Standard Rate: **{final_rate_for_tuning} lbs/in**")
-        
-        st.markdown("### Comparison of Alternative Spring Rates")
         center_rate = int(round(raw_rate / 25) * 25)
         for r in [center_rate - 50, center_rate - 25, center_rate, center_rate + 25, center_rate + 50]:
             if r <= 0: continue
@@ -351,31 +330,19 @@ if raw_rate > 0:
         pdf.cell(200, 8, f"Calculated Rear Load: {rear_load_lbs:.1f} lbs", ln=True)
         pdf.cell(200, 8, f"Mathematical Baseline: {int(raw_rate)} lbs/in", ln=True)
         
-        pdf.ln(5)
-        pdf.set_font("Arial", 'B', 12); pdf.cell(200, 10, "2. Selected Hardware & Logic", ln=True)
-        pdf.set_font("Arial", size=10)
-        pdf.cell(200, 8, f"Selected Spring Type: {spring_type_sel}", ln=True)
+        pdf.ln(5); pdf.set_font("Arial", 'B', 12); pdf.cell(200, 10, "2. Setup Guide", ln=True)
+        pdf.set_font("Arial", size=10); pdf.cell(200, 8, f"Spring Type: {spring_type_sel}", ln=True)
         if "Sprindex" in spring_type_sel:
             pdf.cell(200, 8, f"Chosen Hardware: {chosen_range} lbs", ln=True)
         else:
             pdf.cell(200, 8, f"Required Size: {spring_size_display:.2f} {u_len_label} Stroke", ln=True)
         
-        pdf.ln(5)
-        pdf.set_font("Arial", 'B', 12); pdf.cell(200, 10, "3. Adjustable Settings Matrix", ln=True)
-        pdf.set_font("Arial", 'B', 10); pdf.cell(60, 8, "Rate (lbs)", 1); pdf.cell(60, 8, "Sag (%)", 1); pdf.cell(60, 8, "Feel", 1, ln=True)
-        pdf.set_font("Arial", size=10)
+        pdf.ln(5); pdf.set_font("Arial", 'B', 12); pdf.cell(200, 10, "3. Alternative Rates", ln=True)
         for r_row in alt_rates:
-            pdf.cell(60, 8, r_row["Rate (lbs)"], 1); pdf.cell(60, 8, r_row["Resulting Sag"], 1); pdf.cell(60, 8, r_row["Feel"], 1, ln=True)
-        
-        pdf.ln(5)
-        pdf.set_font("Arial", 'B', 12); pdf.cell(200, 10, f"4. Mechanical Preload Guide ({final_rate_for_tuning} lbs)", ln=True)
-        pdf.set_font("Arial", 'B', 10); pdf.cell(60, 8, "Turns", 1); pdf.cell(60, 8, "Resulting Sag (%)", 1); pdf.cell(60, 8, "Status", 1, ln=True)
-        pdf.set_font("Arial", size=10)
-        for row in preload_data:
-            pdf.cell(60, 8, str(row["Turns"]), 1); pdf.cell(60, 8, row["Sag (%)"], 1); pdf.cell(60, 8, row["Status"], 1, ln=True)
+            pdf.cell(200, 8, f"{r_row['Rate (lbs)']}: {r_row['Resulting Sag']} ({r_row['Feel']})", ln=True)
         
         pdf.ln(10); pdf.set_font("Arial", 'I', 9)
-        pdf.multi_cell(0, 5, "Engineering Disclaimer: This report provides a theoretical baseline. Actual requirements may deviate due to damper valving, friction, and dynamic riding loads. Physical verification via sag measurement is mandatory.")
+        pdf.multi_cell(0, 5, "Engineering Disclaimer: Actual requirements may deviate due to damper valving, friction, and dynamic riding loads. Physical verification via sag measurement is mandatory.")
         return pdf.output(dest="S").encode("latin-1")
     
     st.download_button(label="Export Results to PDF", data=generate_pdf(), file_name=f"MTB_Spring_Report_{datetime.datetime.now().strftime('%Y%m%d')}.pdf", mime="application/pdf")
@@ -385,14 +352,10 @@ st.divider(); st.subheader("Configuration Log")
 st.info("Help us improve: By logging your setup, you contribute kinematic data to our global database.")
 flat_log = {
     "Timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-    "Chassis": chassis_type, "Bike_Model": bike_model_log, "Frame_Size": frame_size_log,
+    "Chassis": chassis_type, "Bike_Model": bike_model_log,
     "Sprung_Mass_Kg": round(sprung_mass_kg, 1), "Unsprung_Mass_Kg": round(unsprung_kg, 1),
     "Target_Sag_Pct": target_sag, "Calculated_Spring_Rate": int(raw_rate) if raw_rate else 0,
-    "Kinematics_Source": "Database" if is_db_bike else "User Contributed",
-    "Bias_Setting": f"Custom ({final_bias_calc - defaults['bias']:+d}%)",
-    "Travel_mm_Log": round(travel_mm, 1), "Stroke_mm_Log": round(stroke_mm, 1),
-    "Start_LR_Log": round(calc_lr_start, 2), "Progression_Log": round(prog_pct, 1),
-    "Submission_Type": "Verified" if is_db_bike else "User_Contributed"
+    "Stroke_mm": round(stroke_mm, 1), "Travel_mm": round(travel_mm, 1)
 }
 
 try:
@@ -407,12 +370,7 @@ st.markdown("---"); st.subheader("Capability Notice")
 st.info(
     """
     Engineering Disclaimer: This calculator provides a theoretical baseline derived from kinematic geometry and static mass properties. 
-    Actual spring rate requirements may deviate due to:
-    * Damper valving characteristics (compression tune).
-    * System friction (seals, bushings, bearings).
-    * Dynamic riding loads and terrain severity.
-    * Spring Internal Diameter (ID): Verify hardware compatibility. Ensure performance adapters are used to prevent mechanical binding.
-    
-    Data is provided for estimation purposes; physical verification via sag measurement is mandatory.
+    Actual spring rate requirements may deviate due to damper valving, friction, and dynamic riding loads. 
+    Physical verification via sag measurement is mandatory.
     """
 )
