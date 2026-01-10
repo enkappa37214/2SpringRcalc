@@ -269,7 +269,8 @@ with col_c2:
         
     rear_bias_in = st.slider("Base Bias (%)", 55, 75, key="rear_bias_slider", label_visibility="collapsed")
     final_bias_calc = rear_bias_in
-    # CHANGED: Added back "(Dynamic/Attack)" context text
+    
+    # RE-ADDED: Dynamic/Attack text and Skill Modifier logic
     st.caption(f"Category Default: **{cat_def_bias}%** (Dynamic/Attack)")
     if skill_suggestion != 0:
         advice_sign = "+" if skill_suggestion > 0 else ""
@@ -410,7 +411,6 @@ st.header("Results")
 
 if raw_rate > 0:
     res_c1, res_c2 = st.columns(2)
-    # CHANGED: Label text
     res_c1.metric("Calculated spring rate", f"{int(raw_rate)} lbs/in")
     res_c2.metric("Target Sag", f"{target_sag:.1f}% ({sag_mm:.1f} mm)")
 
@@ -428,7 +428,6 @@ if raw_rate > 0:
         elif stroke_mm <= 75: family = "DH (75mm)"
         
         if family:
-            # CHANGED: Label text to describe coil model
             st.markdown(f"**Recommended Coil Model:** {family}")
             ranges = SPRINDEX_DATA[family]["ranges"]
             found_match = False
@@ -470,10 +469,7 @@ if raw_rate > 0:
             final_rate_for_tuning = int(raw_rate)
     else:
         st.subheader("Available Spring Options")
-        
-        # CHANGED: Added minimum spring stroke info
         st.markdown(f"**Minimum Spring Stroke:** > {stroke_mm:.0f} mm")
-        
         options = []
         base_step = 25
         center_rate = int(round(raw_rate / base_step) * base_step)
@@ -498,3 +494,11 @@ if raw_rate > 0:
     st.dataframe(pd.DataFrame(preload_data), hide_index=True)
 else:
     st.error("Ensure Stroke and Travel are > 0.")
+
+# RE-ADDED: Disclaimers
+st.info("""
+**Disclaimers:**
+* **Rate Tolerance:** Standard coils vary +/- 5%.
+* **Stroke Compatibility:** Ensure spring stroke > shock stroke to avoid coil bind.
+* **Diameter:** Check spring ID compatibility with your specific shock body.
+""")
