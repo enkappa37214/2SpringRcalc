@@ -178,6 +178,8 @@ defaults = CATEGORY_DATA[category]
 
 col_c1, col_c2 = st.columns(2)
 with col_c1:
+    
+    # --- Bike Weight Source Logic ---
     weight_mode = st.radio("Bike Weight Mode", ["Manual Input", "Estimate"], horizontal=True)
     if weight_mode == "Estimate":
         mat = st.selectbox("Frame Material", ["Carbon", "Aluminium"])
@@ -190,6 +192,7 @@ with col_c1:
         bike_input = st.number_input(f"Bike Weight ({u_mass_label})", 7.0, 45.0, defaults["bike_mass_def_kg"] + (EBIKE_WEIGHT_PENALTY_KG if is_ebike else 0.0), 0.1)
         bike_kg = bike_input * LB_TO_KG if unit_mass == "North America (lbs)" else bike_input
 
+    # --- Unsprung Mass Source Logic ---
     unsprung_mode = st.toggle("Estimate Unsprung Mass", value=False)
     if unsprung_mode:
         u_tier = st.selectbox("Wheelset Tier", ["Light", "Standard", "Heavy"], index=1)
