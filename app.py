@@ -242,7 +242,7 @@ with st.container():
         st.subheader("Selection")
         spring_type_sel = st.selectbox("Select Spring Type", ["Standard Steel (Linear)", "Lightweight Steel/Ti (linear)", "Sprindex (20% end progression)", "Progressive Coil"])
 
-# --- PREFERENCES & CALCS ---
+# --- SETUP PREFERENCES ---
 st.header("5. Setup Preferences")
 target_sag = st.slider("Target Sag (%)", 20.0, 40.0, float(defaults["base_sag"]), 0.5)
 total_drop = (calc_lr_start - (calc_lr_start * (1 - (prog_pct/100))))
@@ -263,6 +263,7 @@ if raw_rate > 0:
     res_c2.metric("Target Sag", f"{target_sag:.1f}% ({stroke_mm * (target_sag / 100):.1f} mm)")
 
     final_rate_for_tuning = int(round(raw_rate / 25) * 25)
+    alt_rates = []
 
     # --- SPRINDEX LOGIC ---
     if "Sprindex" in spring_type_sel:
@@ -289,21 +290,31 @@ if raw_rate > 0:
             st.warning(f"Calculated rate ({int(raw_rate)} lbs) falls in a gap.")
             gap_choice = st.radio("Choose option:", [f"Option A: {lower_r} (Plush)", f"Option B: {upper_r} (Supportive)"])
             final_rate_for_tuning = low_limit if "Option A" in gap_choice else high_limit
+
+        # --- SPRINDEX SPECIFIC ALTERNATIVES ---
+        st.markdown("### Comparison of Adjustable Settings")
+        step = 5 if family != "DH (75mm)" else 10
+        center_sprindex = int(round(raw_rate / step) * step)
+        for r in [center_sprindex - (2*step), center_sprindex - step, center_sprindex, center_sprindex + step, center_sprindex + (2*step)]:
+            if r <= 0: continue
+            r_sag_pct = ((rear_load_lbs * effective_lr / r) / (stroke_mm * MM_TO_IN)) * 100
+            alt_rates.append({"Rate (lbs)": f"{r} lbs", "Resulting Sag": f"{r_sag_pct:.1f}%", "Feel": "Plush" if r < center_sprindex else "Supportive" if r > center_sprindex else "Target"})
     
-    elif spring_type_sel == "Progressive Coil":
-        st.info(f"Recommended Progressive Rate: **{int(raw_rate)} - {int(raw_rate * 1.15)} lbs/in**")
+    else:
+        # --- LINEAR ALTERNATIVES ---
+        if spring_type_sel == "Progressive Coil":
+            st.info(f"Recommended Progressive Rate: **{int(raw_rate)} - {int(raw_rate * 1.15)} lbs/in**")
+        
+        st.markdown("### Comparison of Alternative Spring Rates")
+        center_rate = int(round(raw_rate / 25) * 25)
+        for r in [center_rate - 50, center_rate - 25, center_rate, center_rate + 25, center_rate + 50]:
+            if r <= 0: continue
+            r_sag_pct = ((rear_load_lbs * effective_lr / r) / (stroke_mm * MM_TO_IN)) * 100
+            alt_rates.append({"Rate (lbs)": f"{r} lbs", "Resulting Sag": f"{r_sag_pct:.1f}%", "Feel": "Plush" if r < center_rate else "Supportive" if r > center_rate else "Target"})
     
-    # --- ALTERNATIVES TABLE ---
-    st.markdown("### Comparison of Alternative Spring Rates")
-    alt_rates = []
-    center_rate = int(round(raw_rate / 25) * 25)
-    for r in [center_rate - 50, center_rate - 25, center_rate, center_rate + 25, center_rate + 50]:
-        if r <= 0: continue
-        r_sag_pct = ((rear_load_lbs * effective_lr / r) / (stroke_mm * MM_TO_IN)) * 100
-        alt_rates.append({"Rate (lbs)": f"{r} lbs", "Resulting Sag": f"{r_sag_pct:.1f}%", "Feel": "Plush" if r < center_rate else "Supportive" if r > center_rate else "Target"})
     st.table(alt_rates)
 
-    # --- PRELOAD TABLE ---
+    # --- FINE TUNING ---
     st.subheader("Fine Tuning (Preload)")
     preload_data = []
     for turns in [0.5, 1.0, 1.5, 2.0, 2.5, 3.0]:
@@ -324,7 +335,7 @@ if raw_rate > 0:
         pdf.set_font("Arial", size=12); pdf.cell(200, 10, f"Recommended Spring Rate: {int(raw_rate)} lbs/in", ln=True)
         pdf.cell(200, 10, f"Spring Type: {spring_type_sel}", ln=True)
         pdf.cell(200, 10, f"Target Sag: {target_sag}%", ln=True); pdf.ln(5)
-        pdf.set_font("Arial", 'B', 12); pdf.cell(200, 10, "Alternative Spring Rates", ln=True)
+        pdf.set_font("Arial", 'B', 12); pdf.cell(200, 10, "Alternative Rates/Settings", ln=True)
         pdf.set_font("Arial", 'B', 10); pdf.cell(60, 8, "Rate (lbs)", 1); pdf.cell(60, 8, "Sag (%)", 1); pdf.cell(60, 8, "Feel", 1, ln=True)
         pdf.set_font("Arial", size=10)
         for r_row in alt_rates:
@@ -335,11 +346,11 @@ if raw_rate > 0:
         for row in preload_data:
             pdf.cell(60, 8, str(row["Turns"]), 1); pdf.cell(60, 8, row["Sag (%)"], 1); pdf.cell(60, 8, row["Status"], 1, ln=True)
         pdf.ln(10); pdf.set_font("Arial", 'I', 9)
-        pdf.multi_cell(0, 5, "Engineering Disclaimer: This report provides a theoretical baseline. Actual requirements may deviate due to damper valving, system friction, and riding loads. Sag measurement is mandatory.")
+        pdf.multi_cell(0, 5, "Engineering Disclaimer: This report provides a theoretical baseline. Actual requirements may deviate due to damper valving, friction, and riding loads. Sag measurement is mandatory.")
         return pdf.output(dest="S").encode("latin-1")
     st.download_button(label="Export Results to PDF", data=generate_pdf(), file_name=f"MTB_Spring_Report_{datetime.datetime.now().strftime('%Y%m%d')}.pdf", mime="application/pdf")
 
-# --- LOGGING & REVIEW ---
+# --- LOGGING ---
 st.divider(); st.subheader("Configuration Log")
 st.info("Help us improve: By logging your setup, you contribute kinematic data to our global database.")
 flat_log = {
