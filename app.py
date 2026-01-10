@@ -180,18 +180,19 @@ col_c1, col_c2 = st.columns(2)
 with col_c1:
     # 1. FIXED BIKE WEIGHT LOGIC WITH FRAME SIZE IN BOTH MODES
     weight_mode = st.radio("Bike Weight Mode", ["Manual Input", "Estimate"], horizontal=True)
-    
     if weight_mode == "Estimate":
-    # ... Material/Level selectors ...
-    f_size = st.selectbox("Size", list(SIZE_WEIGHT_MODS.keys()), index=2)
-    bike_kg = float(base + SIZE_WEIGHT_MODS[f_size] + (8.5 if is_ebike else 0.0))
-    bike_weight_source = f"Estimate ({mat}/{level})"
+        mat = st.selectbox("Frame Material", ["Carbon", "Aluminium"])
+        level = st.selectbox("Build Level", ["Entry-Level", "Mid-Level", "High-End"])
+        f_size = st.selectbox("Size", list(SIZE_WEIGHT_MODS.keys()), index=2) # Frame size select
+        base = BIKE_WEIGHT_EST[category][mat][{"Entry-Level": 0, "Mid-Level": 1, "High-End": 2}[level]]
+        bike_kg = float(base + SIZE_WEIGHT_MODS[f_size] + (EBIKE_WEIGHT_PENALTY_KG if is_ebike else 0.0))
+        bike_weight_source = f"Estimate ({mat}/{level})"
     else:
-    # MODIFICATION: Added Frame Size to manual mode
-    f_size = st.selectbox("Frame Size", list(SIZE_WEIGHT_MODS.keys()), index=2) 
-    bike_input = st.number_input(f"Bike Weight ({u_mass_label})", 7.0, 45.0, float(defaults["bike_mass_def_kg"]) + (8.5 if is_ebike else 0.0))
-    bike_kg = float(bike_input * LB_TO_KG if unit_mass == "North America (lbs)" else bike_input)
-    bike_weight_source = "Manual"
+        # Added Frame Size for manual input mode
+        f_size = st.selectbox("Frame Size", list(SIZE_WEIGHT_MODS.keys()), index=2) 
+        bike_input = st.number_input(f"Bike Weight ({u_mass_label})", 7.0, 45.0, float(defaults["bike_mass_def_kg"]) + (EBIKE_WEIGHT_PENALTY_KG if is_ebike else 0.0))
+        bike_kg = float(bike_input * LB_TO_KG if unit_mass == "North America (lbs)" else bike_input)
+        bike_weight_source = "Manual"
         
     # --- Unsprung Mass Source Logic ---
     unsprung_mode = st.toggle("Estimate Unsprung Mass", value=False)
