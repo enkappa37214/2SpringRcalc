@@ -13,8 +13,9 @@ IN_TO_MM = 25.4
 MM_TO_IN = 1/25.4
 STONE_TO_KG = 6.35029
 PROGRESSIVE_CORRECTION_FACTOR = 0.97
+EBIKE_WEIGHT_PENALTY_KG = 8.5
 
-# --- Data Tables (v12.12 Refined) ---
+# --- Data Tables ---
 CATEGORY_DATA = {
     "Downcountry": {
         "travel": 115, "stroke": 45.0, "base_sag": 28,
@@ -90,12 +91,13 @@ def load_bike_database():
     except FileNotFoundError:
         return pd.DataFrame()
 
-def estimate_unsprung(wheel_tier, frame_mat, has_inserts):
+def estimate_unsprung(wheel_tier, frame_mat, has_inserts, is_ebike):
     base = 1.0
     wheels = {"Light": 1.7, "Standard": 2.3, "Heavy": 3.0}[wheel_tier]
     swingarm = 0.4 if frame_mat == "Carbon" else 0.7
     inserts = 0.5 if has_inserts else 0.0
-    return base + wheels + swingarm + inserts
+    motor_modifier = 1.5 if is_ebike else 0.0 
+    return base + wheels + swingarm + inserts + motor_modifier
 
 def analyze_spring_compatibility(progression_pct, has_hbo):
     analysis = {
@@ -134,13 +136,13 @@ def update_category_from_bike():
         bike_row = bike_db[bike_db['Model'] == selected_model].iloc[0]
         t = bike_row['Travel_mm']
         cat_keys = list(CATEGORY_DATA.keys())
-        new_idx = 3 # Default Enduro
+        new_idx = 3 
         if t < 125: new_idx = 0
         elif t < 140: new_idx = 1
         elif t < 155: new_idx = 2
         elif t < 170: new_idx = 3
         elif t < 185: new_idx = 4
-        else: new_idx = 6 # DH
+        else: new_idx = 6 
         st.session_state.category_select = cat_keys[new_idx]
         st.session_state.rear_bias_slider = CATEGORY_DATA[cat_keys[new_idx]]["bias"]
 
@@ -148,9 +150,8 @@ def update_category_from_bike():
 # 3. UI MAIN
 # ==========================================================
 st.title("MTB Spring Rate Calculator")
-st.caption("Capability Notice: This tool was built for personal use, relying on the logic of just one simple rider. If you find an error, please signal the developer. If you feel you are smarter than the developer, the compiler is free - go build your own.")
+st.caption("Capability Notice: This tool was built for personal use. If you find an error, please signal the developer.")
 
-# Load Database
 bike_db = load_bike_database()
 
 # --- SETTINGS ---
@@ -182,7 +183,7 @@ with col_r2:
     else:
         rider_in = st.number_input("Rider Weight (kg)", 40.0, 130.0, 68.0, 0.5)
         rider_kg = rider_in
-    
+     
     gear_label = "Gear Weight (lbs)" if unit_mass == "North America (lbs)" else "Gear Weight (kg)"
     gear_def = 5.0 if unit_mass == "North America (lbs)" else 4.0
     gear_in = st.number_input(gear_label, 0.0, 25.0, gear_def, 0.5)
@@ -196,6 +197,8 @@ st.header("2. Chassis Data")
 # --- DATABASE SELECTION ---
 selected_bike_data = None
 is_db_bike = False
+chassis_type = st.radio("Chassis Configuration", ["Analog Bike", "E-Bike"], horizontal=True)
+is_ebike = (chassis_type == "E-Bike")
 
 if not bike_db.empty:
     bike_models = list(bike_db['Model'].unique())
@@ -206,20 +209,17 @@ if not bike_db.empty:
     if selected_model:
         selected_bike_data = bike_db[bike_db['Model'] == selected_model].iloc[0]
         is_db_bike = True
-        
-        # Check against Archetype (Confidence Feature)
         arch_check = CATEGORY_DATA.get(st.session_state.get('category_select', 'Enduro'))
         if arch_check:
             real_lr = selected_bike_data['Start_Leverage']
             base_lr = arch_check['lr_start']
             dev_pct = abs((real_lr - base_lr) / base_lr) * 100
             if dev_pct > 5.0:
-                 st.warning(f"📊 **Unique Kinematics Detected:** This bike's leverage ratio ({real_lr:.2f}) deviates significantly ({dev_pct:.1f}%) from the category average ({base_lr:.2f}). **Good thing we are using real data!**")
+                 st.warning(f"📊 **Unique Kinematics Detected:** This bike's leverage ratio ({real_lr:.2f}) deviates significantly ({dev_pct:.1f}%) from the category average.")
             else:
                  st.success(f"✅ Loaded: **{selected_model}** | Kinematics match category norms.")
         else:
              st.success(f"Loaded: **{selected_model}**")
-
 else:
     st.warning("Database not found. Manual Mode active.")
 
@@ -236,21 +236,29 @@ col_c1, col_c2 = st.columns(2)
 # --- Bike Weight ---
 with col_c1:
     weight_mode = st.radio("Bike Weight Mode", ["Manual Input", "Estimate"], index=0, horizontal=True)
+    frame_size_log = "N/A"
+    
     if weight_mode == "Estimate":
         mat = st.selectbox("Frame Material", ["Carbon", "Aluminium"])
         level = st.selectbox("Build Level", ["Entry-Level", "Mid-Level", "High-End"])
         size = st.selectbox("Size", list(SIZE_WEIGHT_MODS.keys()), index=2)
         level_idx = {"Entry-Level": 0, "Mid-Level": 1, "High-End": 2}[level]
         base_w = BIKE_WEIGHT_EST[category][mat][level_idx]
-        est_w = base_w + SIZE_WEIGHT_MODS[size]
+        ebike_adder = EBIKE_WEIGHT_PENALTY_KG if is_ebike else 0.0
+        est_w = base_w + SIZE_WEIGHT_MODS[size] + ebike_adder
         st.info(f"Estimated: {est_w:.2f} kg ({est_w * KG_TO_LB:.1f} lbs)")
+        if is_ebike: st.caption(f"Includes +{EBIKE_WEIGHT_PENALTY_KG}kg E-Bike Offset")
         bike_kg = est_w
+        frame_size_log = size
     else:
+        frame_size_in = st.text_input("Frame Size (Optional)", placeholder="e.g. L, S3, 54cm")
+        if frame_size_in: frame_size_log = frame_size_in
         is_lbs = unit_mass == "North America (lbs)"
         lbl = "Bike Weight (lbs)" if is_lbs else "Bike Weight (kg)"
         def_w_kg = defaults.get("bike_mass_def_kg", 14.5)
+        if is_ebike: def_w_kg += EBIKE_WEIGHT_PENALTY_KG
         def_w_val = def_w_kg * KG_TO_LB if is_lbs else def_w_kg
-        min_w, max_w = (15.0, 66.0) if is_lbs else (7.0, 30.0)
+        min_w, max_w = (15.0, 80.0) if is_lbs else (7.0, 36.0)
         w_in = st.number_input(lbl, min_w, max_w, float(def_w_val), 0.1, key="bike_weight_man")
         bike_kg = w_in * LB_TO_KG if is_lbs else w_in
 
@@ -258,20 +266,16 @@ with col_c1:
 with col_c2:
     cat_def_bias = int(defaults["bias"])
     skill_suggestion = SKILL_MODIFIERS[skill]["bias"]
-    
     cl1, cl2 = st.columns([0.7, 0.3])
     with cl1: st.markdown("### Rear Bias")
     with cl2:
         if st.button("Reset", help=f"Reset to {cat_def_bias}%"):
             st.session_state.rear_bias_slider = cat_def_bias
             st.rerun()
-    
     if 'rear_bias_slider' not in st.session_state:
         st.session_state.rear_bias_slider = cat_def_bias
-        
     rear_bias_in = st.slider("Base Bias (%)", 55, 75, key="rear_bias_slider", label_visibility="collapsed")
     final_bias_calc = rear_bias_in
-    
     st.caption(f"Category Default: **{cat_def_bias}%** (Dynamic/Attack)")
     if skill_suggestion != 0:
         advice_sign = "+" if skill_suggestion > 0 else ""
@@ -286,13 +290,14 @@ with col_c1:
         u_tier = st.selectbox("Wheelset Tier", ["Light", "Standard", "Heavy"], index=1)
         u_mat = st.selectbox("Rear Triangle", ["Carbon", "Aluminium"], index=1)
         has_inserts = st.checkbox("Tyre Inserts installed?", value=False)
-        unsprung_kg = estimate_unsprung(u_tier, u_mat, has_inserts)
+        unsprung_kg = estimate_unsprung(u_tier, u_mat, has_inserts, is_ebike)
         st.caption(f"Est: {unsprung_kg:.1f} kg")
     else:
         is_lbs = unit_mass == "North America (lbs)"
         lbl_u = "Unsprung (lbs)" if is_lbs else "Unsprung (kg)"
         u_def = 9.4 if is_lbs else 4.27
-        u_in = st.number_input(lbl_u, 0.0, 20.0, u_def, 0.01)
+        if is_ebike: u_def += 2.0
+        u_in = st.number_input(lbl_u, 0.0, 25.0, u_def, 0.01)
         unsprung_kg = u_in * LB_TO_KG if is_lbs else u_in
 
 # ==========================================================
@@ -320,14 +325,12 @@ def_stroke = raw_stroke if unit_len == "Millimetres (mm)" else raw_stroke * MM_T
 with col_k1:
     t_lbl = "Rear Travel (mm)" if unit_len == "Millimetres (mm)" else "Rear Travel (in)"
     travel_in = st.number_input(t_lbl, 0.0, 300.0, float(def_travel), 1.0)
-    
     s_lbl = "Shock Stroke (mm)" if unit_len == "Millimetres (mm)" else "Shock Stroke (in)"
     stroke_in = st.number_input(s_lbl, 1.5, 100.0, float(def_stroke), 0.5)
 
 travel_mm = travel_in * IN_TO_MM if unit_len != "Millimetres (mm)" else travel_in
 stroke_mm = stroke_in * IN_TO_MM if unit_len != "Millimetres (mm)" else stroke_in
 
-# SAFETY RAIL: Check for Catastrophic Stroke Mismatch
 if stroke_mm > 0:
     implied_lr = travel_mm / stroke_mm
     if implied_lr > 3.3 or implied_lr < 2.2:
@@ -340,12 +343,10 @@ with col_k2:
     use_advanced_calc = False
     calc_lr_start = 0.0
     calc_lr_end = 0.0
-    
     if adv_kinematics:
         use_advanced_calc = True
         lr_start = st.number_input("LR Start Rate", 1.5, 4.0, raw_lr_start, 0.05)
         k_input_mode = st.radio("Input Mode", ["Start & End Rates", "Start & Progression %"], horizontal=True, index=0)
-        
         if k_input_mode == "Start & Progression %":
             prog_pct = st.number_input("Progression (%)", -10.0, 60.0, raw_prog, 1.0)
             lr_end = lr_start * (1 - (prog_pct/100))
@@ -435,7 +436,6 @@ if raw_rate > 0:
             ranges = SPRINDEX_DATA[family]["ranges"]
             found_match = False
             gap_neighbors = []
-            
             for i, r_str in enumerate(ranges):
                 low, high = map(int, r_str.split("-"))
                 if low <= raw_rate <= high:
@@ -449,7 +449,6 @@ if raw_rate > 0:
                     prev_low, prev_high = map(int, ranges[i-1].split("-"))
                     if prev_high < raw_rate < low:
                         gap_neighbors = [(ranges[i-1], prev_high), (r_str, low)]
-            
             if not found_match and gap_neighbors:
                 lower_range_str, lower_limit_val = gap_neighbors[0]
                 upper_range_str, upper_limit_val = gap_neighbors[1]
@@ -492,21 +491,51 @@ if raw_rate > 0:
         preload_mm = turns * 1.0
         sag_in_eff = (rear_load_lbs * effective_lr / final_rate_for_tuning) - (preload_mm * MM_TO_IN)
         sag_pct_eff = (sag_in_eff / (stroke_mm * MM_TO_IN)) * 100
-        
         status = ""
-        if turns < 1.0:
-            status = "⚠️ < 1.0 Turn"
-        elif turns >= 3.0:
-            status = "⚠️ Excessive"
-        elif sag_pct_eff < 25:
-            status = "⚠️ Too Stiff"
-        else:
-            status = "✅"
-            
+        if turns < 1.0: status = "⚠️ < 1.0 Turn"
+        elif turns >= 3.0: status = "⚠️ Excessive"
+        elif sag_pct_eff < 25: status = "⚠️ Too Stiff"
+        else: status = "✅"
         preload_data.append({"Turns": turns, "Sag (%)": f"{sag_pct_eff:.1f}%", "Status": status})
     st.dataframe(pd.DataFrame(preload_data), hide_index=True)
 else:
     st.error("Ensure Stroke and Travel are > 0.")
+
+st.divider()
+# --- LOGGING OUTPUT ---
+st.subheader("📋 Configuration Log")
+with st.expander("Show Setup Data (For Export)", expanded=True):
+    # Detect Data Source Origins
+    weight_src = "Estimated" if weight_mode == "Estimate" else "Manual Input"
+    unsprung_src = "Estimated" if unsprung_mode else "Manual Input"
+    
+    kinematics_src = "Database" if is_db_bike else "Manual/Generic"
+    # Check if user overrode specific kinematic fields in manual mode
+    if not is_db_bike:
+        if travel_mm != defaults["travel"] or stroke_mm != defaults["stroke"]:
+            kinematics_src = "Manual (Customized)"
+
+    bias_offset = final_bias_calc - cat_def_bias
+    bias_status = "Default" if bias_offset == 0 else f"Custom ({bias_offset:+d}%)"
+    
+    log_payload = {
+        "User_Setup": {
+            "Chassis": chassis_type,
+            "Bike_Model": selected_model if selected_model else "Generic/Manual",
+            "Frame_Size": frame_size_log,
+            "Rider_Weight_Kg": round(rider_kg, 1),
+            "Bike_Weight_Kg": round(bike_kg, 1),
+            "Target_Sag_Pct": target_sag,
+            "Calculated_Spring_Rate": int(raw_rate) if raw_rate else 0
+        },
+        "Data_Origins": {
+            "Kinematics_Source": kinematics_src,
+            "Bike_Weight_Source": weight_src,
+            "Unsprung_Mass_Source": unsprung_src,
+            "Bias_Setting": bias_status
+        }
+    }
+    st.json(log_payload)
 
 st.info("""
 **Disclaimers:**
