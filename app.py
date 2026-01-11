@@ -149,22 +149,37 @@ with col_r2:
 
 # --- CHASSIS DATA ---
 st.header("2. Chassis Data")
-chassis_type = st.radio("Chassis Configuration", ["Analog Bike", "E-Bike"], horizontal=True)
-is_ebike = (chassis_type == "E-Bike")
 
-selected_bike_data, is_db_bike, bike_model_log = None, False, ""
+# Top Level Configuration: Unitary horizontal row
+config_col1, config_col2 = st.columns([0.5, 0.5])
+with config_col1:
+    chassis_type = st.radio("Chassis Configuration", ["Analog Bike", "E-Bike"], horizontal=True)
+    is_ebike = (chassis_type == "E-Bike")
+with config_col2:
+    weight_mode = st.radio("Bike Weight Mode", ["Manual Input", "Estimate"], horizontal=True)
+
+st.divider()
+
+# Bike Search & Manual Entry: Functional container
 col_search, col_toggle = st.columns([0.7, 0.3])
+selected_bike_data, is_db_bike, bike_model_log = None, False, ""
 
-with col_toggle: manual_entry_mode = st.checkbox("Add my bike")
+with col_toggle:
+    manual_entry_mode = st.checkbox("Add my bike")
 
 with col_search:
     if not bike_db.empty:
-        selected_model = st.selectbox("Select Bike Model", list(bike_db['Model'].unique()), index=None, placeholder="Type to search...", key='bike_selector', on_change=update_category_from_bike)
-        st.caption("If your bike is not available you can either leave field empty or choose to help enrich the global database by adding details about your bike.")
+        selected_model = st.selectbox(
+            "Select Bike Model", 
+            list(bike_db['Model'].unique()), 
+            index=None, 
+            placeholder="Type to search...", 
+            key='bike_selector', 
+            on_change=update_category_from_bike
+        )
         if selected_model:
             selected_bike_data, is_db_bike, bike_model_log = bike_db[bike_db['Model'] == selected_model].iloc[0], True, selected_model
 
-# Conditional input for bike registration
 if manual_entry_mode:
     st.info("Community Contribution: Global database enrichment.")
     col_new1, col_new2, col_new3 = st.columns(3)
@@ -180,35 +195,37 @@ category = st.selectbox(
     key='category_select', 
     on_change=update_bias_from_category
 )
-
 defaults = CATEGORY_DATA[category]
 
-col_c1, col_c2 = st.columns(2)
-with col_c1:
-    # 1. BIKE WEIGHT LOGIC
+st.divider()
+
+# Mass Estimation & Input logic
+col_inputs, col_summary = st.columns([0.6, 0.4])
+
+with col_inputs:
     size_options = list(SIZE_WEIGHT_MODS.keys())
-    weight_mode = st.radio("Bike Weight Mode", ["Manual Input", "Estimate"], horizontal=True)
+    
+    # 1. BIKE WEIGHT LOGIC
     if weight_mode == "Estimate":
         f_size = st.selectbox("Size", size_options, index=3, key="shared_f_size") 
         mat = st.selectbox("Frame Material", ["Carbon", "Aluminium"])
         level = st.selectbox("Build Level", ["Entry-Level", "Mid-Level", "High-End"])
 
-    # Calculation Logic
         level_map = {"Entry-Level": 0, "Mid-Level": 1, "High-End": 2}
         base_val = BIKE_WEIGHT_EST[category][mat][level_map[level]]
         bike_kg = float(base_val + SIZE_WEIGHT_MODS[f_size] + (EBIKE_WEIGHT_PENALTY_KG if is_ebike else 0.0))
         bike_weight_source = f"Estimate ({mat}/{level})"
         
-        # Display Row: Shows the result before the next section
         bike_display_val = bike_kg if unit_mass != "North America (lbs)" else bike_kg * KG_TO_LB
         st.info(f"**Estimated Bike Weight:** {bike_display_val:.1f} {u_mass_label}")
-        
     else:
         f_size = st.selectbox("Frame Size", size_options, index=3, key="shared_f_size") 
         bike_input = st.number_input(f"Bike Weight ({u_mass_label})", 7.0, 45.0, float(defaults["bike_mass_def_kg"]) + (EBIKE_WEIGHT_PENALTY_KG if is_ebike else 0.0))
         bike_kg = float(bike_input * LB_TO_KG if unit_mass == "North America (lbs)" else bike_input)
         bike_weight_source = "Manual"
         
+    st.markdown("---")
+
     # 2. UNSPRUNG MASS LOGIC
     unsprung_mode = st.toggle("Estimate Unsprung Mass", value=False)
     if unsprung_mode:
@@ -217,40 +234,48 @@ with col_c1:
         u_mat = st.selectbox("Rear Triangle Material", ["Carbon", "Aluminium"], index=1)
         inserts = st.checkbox("Tyre Inserts?")
         
-        # Physics Constants
         wheels = {"Light": 1.7, "Standard": 2.3, "Heavy": 3.0}[u_tier]
         casings = {"XC (Lightweight)": 0.7, "Trail (Standard)": 0.95, "Enduro (Reinforced)": 1.25, "DH (Dual-ply)": 1.5}
         tyre_mass = casings[u_casing]
         swingarm_base = 0.4 if u_mat == "Carbon" else 0.7
         size_factor = SIZE_WEIGHT_MODS[f_size] * 0.15 
         
-        # Final Metric Calculation (Kg)
         unsprung_kg = tyre_mass + wheels + (swingarm_base + size_factor) + (0.5 if inserts else 0.0) + (1.5 if is_ebike else 0.0)
         unsprung_source = f"Estimate ({u_tier}/{u_casing}/{u_mat})"
         
-        # UI DISPLAY: Standardised formatting
         u_display_val = unsprung_kg if unit_mass != "North America (lbs)" else unsprung_kg * KG_TO_LB
         st.info(f"**Estimated Unsprung Mass:** {u_display_val:.2f} {u_mass_label}")
     else:
         unsprung_input = st.number_input(f"Unsprung ({u_mass_label})", 0.0, 25.0, 4.27 + (2.0 if is_ebike else 0.0), 0.1)
         unsprung_kg = float(unsprung_input * LB_TO_KG if unit_mass == "North America (lbs)" else unsprung_input)
         unsprung_source = "Manual"
+
+with col_summary:
+    # Dedicated Summary Panel for Mass Distribution
+    st.subheader("Mass Distribution")
+    if 'rear_bias_slider' not in st.session_state: 
+        st.session_state.rear_bias_slider = defaults["bias"]
     
-with col_c2:
-    if 'rear_bias_slider' not in st.session_state: st.session_state.rear_bias_slider = defaults["bias"]
+    st.markdown(f"**Category Base:** {defaults['bias']}%")
+    st.markdown(f"**Skill Recommendation:** {SKILL_MODIFIERS[skill]['bias']:+d}% ({skill})")
     
-    st.markdown("### Rear Wheel Bias")
-    st.text(f"Category Base Bias: {defaults['bias']}%")
-    st.text(f"Skill Adjustment Recommendation: {SKILL_MODIFIERS[skill]['bias']:+d}% ({skill})")
+    final_bias_calc = st.slider("Rear Wheel Bias (%)", 55, 80, key="rear_bias_slider")
     
-    final_bias_calc = st.slider("Rear Bias (%)", 55, 80, key="rear_bias_slider", label_visibility="collapsed")
     total_system_kg = rider_kg + gear_kg + bike_kg
-    
-    # Unsprung mass correction
     sprung_mass_kg = total_system_kg - unsprung_kg
     rear_val_kg = (sprung_mass_kg * (final_bias_calc/100)) + (unsprung_kg if final_bias_calc > 0 else 0)
     
-    st.info(f"Front: {(total_system_kg - rear_val_kg):.1f}{u_mass_label} | Rear: {rear_val_kg:.1f}{u_mass_label}")
+    front_val = total_system_kg - rear_val_kg
+    
+    st.write("---")
+    st.metric("Total System Mass", f"{total_system_kg:.1f} {u_mass_label}")
+    
+    # Visual distribution bar
+    st.progress(final_bias_calc / 100)
+    
+    c_res1, c_res2 = st.columns(2)
+    with c_res1: st.metric("Front Load", f"{front_val:.1f} {u_mass_label}")
+    with c_res2: st.metric("Rear Load", f"{rear_val_kg:.1f} {u_mass_label}")
 
 # --- KINEMATICS ---
 st.header("3. Shock & Kinematics")
