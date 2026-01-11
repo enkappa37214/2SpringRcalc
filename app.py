@@ -26,7 +26,6 @@ COMMON_STROKES = [45.0, 50.0, 55.0, 57.5, 60.0, 62.5, 65.0, 70.0, 75.0]
 
 SIZE_WEIGHT_MODS = {"XS": -0.5, "S": -0.25, "M": 0.0, "L": 0.3, "XL": 0.6, "XXL": 0.95}
 
-# MODIFIED: Removed Enduro (Race focus)
 BIKE_WEIGHT_EST = {
     "Downcountry": {"Carbon": [12.2, 11.4, 10.4], "Aluminium": [13.8, 13.1, 12.5]},
     "Trail": {"Carbon": [14.1, 13.4, 12.8], "Aluminium": [15.4, 14.7, 14.0]},
@@ -36,7 +35,6 @@ BIKE_WEIGHT_EST = {
     "Downhill (DH)": {"Carbon": [17.8, 17.0, 16.2], "Aluminium": [19.5, 18.5, 17.5]}
 }
 
-# MODIFIED: Removed Enduro (Race focus)
 CATEGORY_DATA = {
     "Downcountry": {"travel": 115, "stroke": 45.0, "base_sag": 28, "progression": 15, "lr_start": 2.82, "desc": "110–120 mm", "bike_mass_def_kg": 12.0, "bias": 60},
     "Trail": {"travel": 130, "stroke": 50.0, "base_sag": 30, "progression": 19, "lr_start": 2.90, "desc": "120–140 mm", "bike_mass_def_kg": 13.5, "bias": 63},
@@ -56,6 +54,15 @@ SPRINDEX_DATA = {
     "Enduro (65mm)": {"max_stroke": 65, "ranges": ["340-380", "390-430", "450-500", "500-550", "540-610", "610-700"]},
     "DH (75mm)": {"max_stroke": 75, "ranges": ["290-320", "340-370", "400-440", "450-490", "510-570", "570-630"]}
 }
+
+PROGRESSIVE_SPRING_DATA = [
+    {"model": "350+", "start": 350, "end": 450, "prog": 28},
+    {"model": "400+", "start": 400, "end": 520, "prog": 30},
+    {"model": "450+", "start": 450, "end": 590, "prog": 31},
+    {"model": "500+", "start": 500, "end": 655, "prog": 31},
+    {"model": "550+", "start": 550, "end": 720, "prog": 31},
+    {"model": "600+", "start": 600, "end": 780, "prog": 30}
+]
 
 # ==========================================================
 # 2. HELPER FUNCTIONS
