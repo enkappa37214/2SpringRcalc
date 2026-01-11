@@ -210,40 +210,39 @@ with col_c1:
         bike_weight_source = "Manual"
         
     # 2. UNSPRUNG MASS LOGIC
+    # 2. UNSPRUNG MASS LOGIC (FIXED INDENTATION)
     unsprung_mode = st.toggle("Estimate Unsprung Mass", value=False)
     if unsprung_mode:
-    u_tier = st.selectbox("Wheelset Tier", ["Light", "Standard", "Heavy"], index=1)
-    
-    # ADDED: Tyre Casing Input for higher precision
-    u_casing = st.selectbox("Tyre Casing", ["XC (Lightweight)", "Trail (Standard)", "Enduro (Reinforced)", "DH (Dual-ply)"], index=1)
-    
-    u_mat = st.selectbox("Rear Triangle Material", ["Carbon", "Aluminium"], index=1)
-    inserts = st.checkbox("Tyre Inserts?")
-    
-    # 1. Base component mapping
-    wheels = {"Light": 1.7, "Standard": 2.3, "Heavy": 3.0}[u_tier]
-    
-    # 2. Tyre Casing mapping (replacing the static 1.0kg base)
-    casings = {"XC (Lightweight)": 0.7, "Trail (Standard)": 0.95, "Enduro (Reinforced)": 1.25, "DH (Dual-ply)": 1.5}
-    tyre_mass = casings[u_casing]
-    
-    # 3. Size-specific swingarm correction
-    # Base swingarm mass
-    swingarm_base = 0.4 if u_mat == "Carbon" else 0.7
-    # Size modifier (Size S = -0.05kg, M = 0kg, XL = +0.1kg)
-    size_factor = SIZE_WEIGHT_MODS[f_size] * 0.15 
-    swingarm_final = swingarm_base + size_factor
+        u_tier = st.selectbox("Wheelset Tier", ["Light", "Standard", "Heavy"], index=1)
+        
+        # Tyre Casing Input for higher precision
+        u_casing = st.selectbox("Tyre Casing", ["XC (Lightweight)", "Trail (Standard)", "Enduro (Reinforced)", "DH (Dual-ply)"], index=1)
+        
+        u_mat = st.selectbox("Rear Triangle Material", ["Carbon", "Aluminium"], index=1)
+        inserts = st.checkbox("Tyre Inserts?")
+        
+        # Base component mapping
+        wheels = {"Light": 1.7, "Standard": 2.3, "Heavy": 3.0}[u_tier]
+        
+        # Tyre Casing mapping
+        casings = {"XC (Lightweight)": 0.7, "Trail (Standard)": 0.95, "Enduro (Reinforced)": 1.25, "DH (Dual-ply)": 1.5}
+        tyre_mass = casings[u_casing]
+        
+        # Size-specific swingarm correction
+        swingarm_base = 0.4 if u_mat == "Carbon" else 0.7
+        size_factor = SIZE_WEIGHT_MODS[f_size] * 0.15 
+        swingarm_final = swingarm_base + size_factor
 
-    # 4. Final Summation
-    unsprung_kg = tyre_mass + wheels + swingarm_final + (0.5 if inserts else 0.0) + (1.5 if is_ebike else 0.0)
-    
-    # Update logging source
-    unsprung_source = f"Estimate ({u_tier}/{u_casing}/{u_mat})"
-    st.caption(f"Estimated unsprung: {unsprung_kg:.2f} kg")
-else:
-    unsprung_input = st.number_input(f"Unsprung ({u_mass_label})", 0.0, 25.0, 4.27 + (2.0 if is_ebike else 0.0), 0.1)
-    unsprung_kg = float(unsprung_input * LB_TO_KG if unit_mass == "North America (lbs)" else unsprung_input)
-    unsprung_source = "Manual"
+        # Final Summation
+        unsprung_kg = tyre_mass + wheels + swingarm_final + (0.5 if inserts else 0.0) + (1.5 if is_ebike else 0.0)
+        
+        # Update logging source
+        unsprung_source = f"Estimate ({u_tier}/{u_casing}/{u_mat})"
+        st.caption(f"Estimated unsprung: {unsprung_kg:.2f} kg")
+    else:
+        unsprung_input = st.number_input(f"Unsprung ({u_mass_label})", 0.0, 25.0, 4.27 + (2.0 if is_ebike else 0.0), 0.1)
+        unsprung_kg = float(unsprung_input * LB_TO_KG if unit_mass == "North America (lbs)" else unsprung_input)
+        unsprung_source = "Manual"
     
 with col_c2:
     if 'rear_bias_slider' not in st.session_state: st.session_state.rear_bias_slider = defaults["bias"]
