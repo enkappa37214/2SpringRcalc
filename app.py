@@ -358,27 +358,41 @@ if raw_rate > 0:
     res_c2.metric("Target Sag", f"{target_sag:.1f}% ({sag_display:.2f} {u_len_label})")
 
     final_rate_for_tuning = int(round(raw_rate / 25) * 25)
-
+    
+    # FIX: Initialize variables with safe fallbacks to prevent NameError
+    sprindex_max = final_rate_for_tuning
+    current_rate = final_rate_for_tuning
+    
+    # We re-run the matching logic here or ensure 'chosen_range' was captured earlier
     if "Sprindex" in spring_type_sel:
-        # 1. SPRINDEX DYNAMIC RANGE MAPPING
         family = "XC/Trail (55mm)" if stroke_mm <= 55 else "Enduro (65mm)" if stroke_mm <= 65 else "DH (75mm)"
+        ranges = SPRINDEX_DATA[family]["ranges"]
         
-        # Extract low and high bounds (e.g., "390-430")
+        # Determine the best range if not already captured
+        active_range = ""
+        for r_str in ranges:
+            low, high = map(int, r_str.split("-"))
+            if low <= raw_rate <= high:
+                active_range = r_str
+                break
+        
+        # Fallback if no perfect fit was found in the gap logic above
+        if not active_range:
+            active_range = ranges[0] # Safe default to first range
+
+        # 1. SPRINDEX DYNAMIC RANGE MAPPING
         try:
-            low_bound, high_bound = map(int, chosen_range.split("-"))
+            low_bound, high_bound = map(int, active_range.split("-"))
         except:
-            low_bound, high_bound = 400, 450 # Safety fallback
+            low_bound, high_bound = 400, 450
             
         step = 5 if "XC/Trail" in family or "Enduro" in family else 10
-        st.subheader(f"Sprindex Range Mapping ({chosen_range} lbs)")
+        st.subheader(f"Sprindex Range Mapping ({active_range} lbs)")
         
         range_data = []
         for r in range(low_bound, high_bound + step, step):
-            # Calculate resulting sag for every index
             r_sag_pct = ((rear_load_lbs * effective_lr / r) / (stroke_mm * MM_TO_IN)) * 100
             diff = r_sag_pct - target_sag
-            
-            # Clinical characterisation of the setting
             status = "Target" if abs(diff) < 0.5 else "Supportive" if diff < 0 else "Plush"
             range_data.append({
                 "Dial Index (lbs)": f"{r} lbs",
@@ -389,7 +403,6 @@ if raw_rate > 0:
         st.table(pd.DataFrame(range_data))
         st.caption(f"Adjust dial in {step}lb increments to refine sag.")
 
-        # 2. PRELOAD BRIDGE (For maximum rate only)
         st.subheader(f"Fine Tuning (Preload - {high_bound} lbs Max Rate)")
         st.info("Apply preload only if target sag is not met at maximum dial index.")
         current_rate = high_bound
@@ -417,7 +430,7 @@ if raw_rate > 0:
         st.subheader(f"Fine Tuning (Preload - {final_rate_for_tuning} lbs spring)")
         current_rate = final_rate_for_tuning
 
-    # COMMON PRELOAD TABLE
+    # PRELOAD TABLE
     preload_results = []
     for turns in [1.0, 1.5, 2.0, 2.5, 3.0]:
         sag_val_calc = (rear_load_lbs * effective_lr / current_rate) - (turns * 1.0 * MM_TO_IN)
