@@ -188,14 +188,15 @@ with col_c1:
     # 1. BIKE WEIGHT LOGIC
     weight_mode = st.radio("Bike Weight Mode", ["Manual Input", "Estimate"], horizontal=True)
     if weight_mode == "Estimate":
-        f_size = st.selectbox("Size", list(SIZE_WEIGHT_MODS.keys()), index=2) 
+        f_size = st.selectbox("Size", size_options, key="shared_f_size") 
         mat = st.selectbox("Frame Material", ["Carbon", "Aluminium"])
         level = st.selectbox("Build Level", ["Entry-Level", "Mid-Level", "High-End"])
+        
         base = BIKE_WEIGHT_EST[category][mat][{"Entry-Level": 0, "Mid-Level": 1, "High-End": 2}[level]]
         bike_kg = float(base + SIZE_WEIGHT_MODS[f_size] + (EBIKE_WEIGHT_PENALTY_KG if is_ebike else 0.0))
         bike_weight_source = f"Estimate ({mat}/{level})"
     else:
-        f_size = st.selectbox("Frame Size", list(SIZE_WEIGHT_MODS.keys()), index=2) 
+        f_size = st.selectbox("Frame Size", size_options, key="shared_f_size") 
         bike_input = st.number_input(f"Bike Weight ({u_mass_label})", 7.0, 45.0, float(defaults["bike_mass_def_kg"]) + (EBIKE_WEIGHT_PENALTY_KG if is_ebike else 0.0))
         bike_kg = float(bike_input * LB_TO_KG if unit_mass == "North America (lbs)" else bike_input)
         bike_weight_source = "Manual"
