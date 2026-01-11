@@ -442,10 +442,12 @@ if raw_rate > 0:
         })
     st.dataframe(pd.DataFrame(preload_results), hide_index=True)
 
+    # --- PDF GENERATION (FIXED SCOPE) ---
     def generate_pdf():
         pdf = FPDF()
         pdf.add_page()
-        pdf.set_font("Arial", 'B', 16); pdf.cell(200, 10, "MTB Spring Rate Calculation Report", ln=True, align='C')
+        pdf.set_font("Arial", 'B', 16)
+        pdf.cell(200, 10, "MTB Spring Rate Calculation Report", ln=True, align='C')
         pdf.set_font("Arial", size=11); pdf.ln(10)
         
         pdf.set_font("Arial", 'B', 12); pdf.cell(200, 10, "1. Calculation Summary", ln=True)
@@ -457,21 +459,48 @@ if raw_rate > 0:
         
         pdf.ln(5); pdf.set_font("Arial", 'B', 12); pdf.cell(200, 10, "2. Setup Guide", ln=True)
         pdf.set_font("Arial", size=10); pdf.cell(200, 8, f"Spring Type: {spring_type_sel}", ln=True)
+        
+        # FIXED: Recalculate or safely fetch range data for PDF scope
         if "Sprindex" in spring_type_sel:
-            pdf.cell(200, 8, f"Chosen Hardware: {chosen_range} lbs", ln=True)
+            # Re-derive range for PDF context
+            pdf_family = "XC/Trail (55mm)" if stroke_mm <= 55 else "Enduro (65mm)" if stroke_mm <= 65 else "DH (75mm)"
+            pdf_ranges = SPRINDEX_DATA[pdf_family]["ranges"]
+            pdf_active_range = next((r for r in pdf_ranges if int(r.split("-")[0]) <= raw_rate <= int(r.split("-")[1])), pdf_ranges[0])
+            
+            pdf.cell(200, 8, f"Hardware Family: {pdf_family}", ln=True)
+            pdf.cell(200, 8, f"Recommended Range: {pdf_active_range} lbs", ln=True)
         else:
             pdf.cell(200, 8, f"Required Size: {spring_size_display:.2f} {u_len_label} Stroke", ln=True)
         
-        pdf.ln(5); pdf.set_font("Arial", 'B', 12); pdf.cell(200, 10, "3. Alternative Rates", ln=True)
-        for r_row in alt_rates:
-            pdf.cell(200, 8, f"{r_row['Rate (lbs)']}: {r_row['Resulting Sag']} ({r_row['Feel']})", ln=True)
+        pdf.ln(5); pdf.set_font("Arial", 'B', 12); pdf.cell(200, 10, "3. Alternative Rates / Mapping", ln=True)
+        # Use alt_rates or range_data if they exist in local scope, else provide a placeholder
+        try:
+            target_list = range_data if "Sprindex" in spring_type_sel else alt_rates
+            for r_row in target_list:
+                # Standardising key names for PDF printing
+                rate_val = r_row.get('Dial Index (lbs)') or r_row.get('Rate (lbs)')
+                sag_val = r_row.get('Resulting Sag')
+                feel_val = r_row.get('Character') or r_row.get('Feel')
+                pdf.cell(200, 8, f"{rate_val}: {sag_val} ({feel_val})", ln=True)
+        except NameError:
+            pdf.cell(200, 8, "Rate mapping data unavailable for PDF export.", ln=True)
         
         pdf.ln(10); pdf.set_font("Arial", 'I', 9)
         pdf.multi_cell(0, 5, "Engineering Disclaimer: Actual requirements may deviate due to damper valving, friction, and dynamic riding loads. Physical verification via sag measurement is mandatory.")
         return pdf.output(dest="S").encode("latin-1")
     
-    st.download_button(label="Export Results to PDF", data=generate_pdf(), file_name=f"MTB_Spring_Report_{datetime.datetime.now().strftime('%Y%m%d')}.pdf", mime="application/pdf")
-
+    # Download Button Trigger
+    try:
+        pdf_bytes = generate_pdf()
+        st.download_button(
+            label="Export Results to PDF", 
+            data=pdf_bytes, 
+            file_name=f"MTB_Spring_Report_{datetime.datetime.now().strftime('%Y%m%d')}.pdf", 
+            mime="application/pdf"
+        )
+    except Exception as e:
+        st.error(f"PDF Generation Error: Ensure all fields are filled. ({e})")
+        
 # --- LOGGING ---
 st.divider(); st.subheader("Configuration Log")
 st.info("Help us improve: By logging your setup, you contribute kinematic data to our global database.")
