@@ -402,14 +402,33 @@ if raw_rate > 0:
     st.table(alt_rates)
 
     if "Sprindex" in spring_type_sel:
-        try:
-            max_sprindex_rate = int(chosen_range.split("-")[1])
-        except:
-            max_sprindex_rate = final_rate_for_tuning
-        st.subheader(f"Fine Tuning (Preload - {max_sprindex_rate} lbs Max Rate)")
-        st.info("**Guidance:** Only apply preload to bridge the gap once the maximum rate of the hardware dial is reached.")
-        current_rate = max_sprindex_rate
+        
+        st.subheader(f"Sprindex Range Mapping ({chosen_range} lbs)")
+        
+        low_bound, high_bound = map(int, chosen_range.split("-"))
+        step = 5 if "XC/Trail" in family or "Enduro" in family else 10
+        
+        range_data = []
+        for r in range(low_bound, high_bound + step, step):
+            r_sag_pct = ((rear_load_lbs * effective_lr / r) / (stroke_mm * MM_TO_IN)) * 100
+            diff = r_sag_pct - target_sag
+            
+            status = "Target" if abs(diff) < 0.5 else "Supportive" if diff < 0 else "Plush"
+            range_data.append({
+                "Dial Setting (lbs)": f"{r} lbs",
+                "Resulting Sag": f"{r_sag_pct:.1f}%",
+                "Character": status
+            })
+        
+        st.table(pd.DataFrame(range_data))
+        st.caption(f"Adjust the Sprindex dial in {step}lb increments to reach your preferred sag.")
+
+        st.subheader(f"Fine Tuning (Preload - {high_bound} lbs Max Rate)")
+        st.info("Only apply preload if you have reached the maximum dial setting and require further sag reduction.")
+        current_rate = high_bound
     else:
+        
+        st.table(alt_rates)
         st.subheader(f"Fine Tuning (Preload - {final_rate_for_tuning} lbs spring)")
         current_rate = final_rate_for_tuning
 
@@ -417,7 +436,11 @@ if raw_rate > 0:
     for turns in [1.0, 1.5, 2.0, 2.5, 3.0]:
         sag_val_calc = (rear_load_lbs * effective_lr / current_rate) - (turns * 1.0 * MM_TO_IN)
         sag_pct = (sag_val_calc / (stroke_mm * MM_TO_IN)) * 100
-        preload_data.append({"Turns": turns, "Sag (%)": f"{max(0, sag_pct):.1f}%", "Status": "OK" if 1.0 <= turns <= 2.0 else "Caution"})
+        preload_data.append({
+            "Turns": turns, 
+            "Sag (%)": f"{max(0, sag_pct):.1f}%", 
+            "Status": "OK" if 1.0 <= turns <= 2.0 else "Caution"
+        })
     st.dataframe(pd.DataFrame(preload_data), hide_index=True)
 
     def generate_pdf():
