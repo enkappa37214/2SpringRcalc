@@ -226,8 +226,11 @@ with col_inputs:
         
     st.markdown("---")
 
-    # 2. UNSPRUNG MASS LOGIC
-    unsprung_mode = st.toggle("Estimate Unsprung Mass", value=False)
+    # 2. UNSPRUNG MASS LOGIC (UPDATED WITH CONDITIONAL DEFAULT)
+    # Toggle is True by default if weight_mode is "Estimate"
+    unsprung_default = True if weight_mode == "Estimate" else False
+    unsprung_mode = st.toggle("Estimate Unsprung Mass", value=unsprung_default)
+    
     if unsprung_mode:
         u_tier = st.selectbox("Wheelset Tier", ["Light", "Standard", "Heavy"], index=1)
         u_casing = st.selectbox("Tyre Casing", ["XC (Lightweight)", "Trail (Standard)", "Enduro (Reinforced)", "DH (Dual-ply)"], index=1)
@@ -249,7 +252,7 @@ with col_inputs:
         unsprung_input = st.number_input(f"Unsprung ({u_mass_label})", 0.0, 25.0, 4.27 + (2.0 if is_ebike else 0.0), 0.1)
         unsprung_kg = float(unsprung_input * LB_TO_KG if unit_mass == "North America (lbs)" else unsprung_input)
         unsprung_source = "Manual"
-
+        
 with col_summary:
     # Dedicated Summary Panel for Mass Distribution
     st.subheader("Mass Distribution")
