@@ -10,7 +10,6 @@ from streamlit_gsheets import GSheetsConnection
 # ==========================================================
 st.set_page_config(page_title="MTB Spring Rate Calculator", page_icon="⚙️", layout="centered")
 
-# State management for reset functionality
 def reset_form_callback():
     for key in st.session_state.keys():
         del st.session_state[key]
@@ -18,7 +17,6 @@ def reset_form_callback():
 if 'category_select' not in st.session_state:
     st.session_state.category_select = "Enduro"
 
-# --- Constants ---
 LB_TO_KG, KG_TO_LB = 0.453592, 2.20462
 IN_TO_MM, MM_TO_IN = 25.4, 1/25.4
 STONE_TO_KG = 6.35029
@@ -28,29 +26,30 @@ COMMON_STROKES = [45.0, 50.0, 55.0, 57.5, 60.0, 62.5, 65.0, 70.0, 75.0]
 
 SIZE_WEIGHT_MODS = {"XS": -0.5, "S": -0.25, "M": 0.0, "L": 0.3, "XL": 0.6, "XXL": 0.95}
 
+# MODIFIED: Removed Enduro (Race focus)
 BIKE_WEIGHT_EST = {
     "Downcountry": {"Carbon": [12.2, 11.4, 10.4], "Aluminium": [13.8, 13.1, 12.5]},
     "Trail": {"Carbon": [14.1, 13.4, 12.8], "Aluminium": [15.4, 14.7, 14.0]},
     "All-Mountain": {"Carbon": [15.0, 14.2, 13.5], "Aluminium": [16.2, 15.5, 14.8]},
     "Enduro": {"Carbon": [16.2, 15.5, 14.8], "Aluminium": [17.5, 16.6, 15.8]},
     "Long Travel Enduro": {"Carbon": [16.8, 16.0, 15.2], "Aluminium": [18.0, 17.2, 16.5]},
-    "Enduro (Race focus)": {"Carbon": [16.0, 15.2, 14.5], "Aluminium": [17.2, 16.3, 15.5]},
     "Downhill (DH)": {"Carbon": [17.8, 17.0, 16.2], "Aluminium": [19.5, 18.5, 17.5]}
 }
 
+# MODIFIED: Removed Enduro (Race focus)
 CATEGORY_DATA = {
     "Downcountry": {"travel": 115, "stroke": 45.0, "base_sag": 28, "progression": 15, "lr_start": 2.82, "desc": "110–120 mm", "bike_mass_def_kg": 12.0, "bias": 60},
     "Trail": {"travel": 130, "stroke": 50.0, "base_sag": 30, "progression": 19, "lr_start": 2.90, "desc": "120–140 mm", "bike_mass_def_kg": 13.5, "bias": 63},
     "All-Mountain": {"travel": 145, "stroke": 55.0, "base_sag": 31, "progression": 21, "lr_start": 2.92, "desc": "140–150 mm", "bike_mass_def_kg": 14.5, "bias": 65},
     "Enduro": {"travel": 160, "stroke": 60.0, "base_sag": 33, "progression": 23, "lr_start": 3.02, "desc": "150–170 mm", "bike_mass_def_kg": 15.10, "bias": 67},
     "Long Travel Enduro": {"travel": 175, "stroke": 65.0, "base_sag": 34, "progression": 27, "lr_start": 3.16, "desc": "170–180 mm", "bike_mass_def_kg": 16.5, "bias": 69},
-    "Enduro (Race focus)": {"travel": 165, "stroke": 62.5, "base_sag": 32, "progression": 26, "lr_start": 3.13, "desc": "160–170 mm", "bike_mass_def_kg": 15.8, "bias": 68},
     "Downhill (DH)": {"travel": 200, "stroke": 72.5, "base_sag": 35, "progression": 28, "lr_start": 3.28, "desc": "180–210 mm", "bike_mass_def_kg": 17.5, "bias": 72}
 }
 
 SKILL_MODIFIERS = {"Just starting": {"bias": +4}, "Beginner": {"bias": +2}, "Intermediate": {"bias": 0}, "Advanced": {"bias": -1}, "Racer": {"bias": -2}}
 SKILL_LEVELS = list(SKILL_MODIFIERS.keys())
-COUPLING_COEFFS = {"Downcountry": 0.80, "Trail": 0.75, "All-Mountain": 0.70, "Enduro": 0.72, "Long Travel Enduro": 0.90, "Enduro (Race focus)": 0.78, "Downhill (DH)": 0.95}
+# MODIFIED: Removed Enduro (Race focus)
+COUPLING_COEFFS = {"Downcountry": 0.80, "Trail": 0.75, "All-Mountain": 0.70, "Enduro": 0.72, "Long Travel Enduro": 0.90, "Downhill (DH)": 0.95}
 
 SPRINDEX_DATA = {
     "XC/Trail (55mm)": {"max_stroke": 55, "ranges": ["380-430", "430-500", "490-560", "550-610", "610-690", "650-760"]},
@@ -103,7 +102,8 @@ def update_category_from_bike():
         elif t < 155: cat_name = cat_keys[2]
         elif t < 170: cat_name = cat_keys[3]
         elif t < 185: cat_name = cat_keys[4]
-        else: cat_name = cat_keys[6]
+        # MODIFIED: Changed index from 6 to 5 to account for removed category
+        else: cat_name = cat_keys[5]
         st.session_state.category_select = cat_name
         st.session_state.rear_bias_slider = CATEGORY_DATA[cat_name]["bias"]
 
@@ -150,7 +150,6 @@ with col_r2:
 # --- CHASSIS DATA ---
 st.header("2. Chassis Data")
 
-# Top Level Configuration: Standardized 50/50 split
 config_col1, config_col2 = st.columns(2)
 with config_col1:
     chassis_type = st.radio("Chassis Configuration", ["Analog Bike", "E-Bike"], horizontal=True)
@@ -160,7 +159,6 @@ with config_col2:
 
 st.divider()
 
-# Bike Search & Manual Entry: Functional container
 col_search, col_toggle = st.columns([0.7, 0.3])
 selected_bike_data, is_db_bike, bike_model_log = None, False, ""
 
@@ -199,13 +197,11 @@ defaults = CATEGORY_DATA[category]
 
 st.divider()
 
-# UPDATED: Standardized 50/50 split for Inputs and Summary
 col_inputs, col_summary = st.columns(2)
 
 with col_inputs:
     size_options = list(SIZE_WEIGHT_MODS.keys())
     
-    # 1. BIKE WEIGHT LOGIC
     if weight_mode == "Estimate":
         f_size = st.selectbox("Size", size_options, index=3, key="shared_f_size") 
         mat = st.selectbox("Frame Material", ["Carbon", "Aluminium"])
@@ -226,7 +222,6 @@ with col_inputs:
         
     st.markdown("---")
 
-    # 2. UNSPRUNG MASS LOGIC
     unsprung_default = True if weight_mode == "Estimate" else False
     unsprung_mode = st.toggle("Estimate Unsprung Mass", value=unsprung_default)
     
@@ -268,7 +263,6 @@ with col_summary:
     front_val = total_system_kg - rear_val_kg
     
     st.write("---")
-    # Normalized labels for the metrics
     total_display = total_system_kg if unit_mass != "North America (lbs)" else total_system_kg * KG_TO_LB
     front_display = front_val if unit_mass != "North America (lbs)" else front_val * KG_TO_LB
     rear_display = rear_val_kg if unit_mass != "North America (lbs)" else rear_val_kg * KG_TO_LB
@@ -279,6 +273,7 @@ with col_summary:
     res_sub1, res_sub2 = st.columns(2)
     with res_sub1: st.metric("Front Load", f"{front_display:.1f} {u_mass_label}")
     with res_sub2: st.metric("Rear Load", f"{rear_display:.1f} {u_mass_label}")
+
         
 # --- KINEMATICS ---
 st.header("3. Shock & Kinematics")
