@@ -192,10 +192,17 @@ with col_c1:
         f_size = st.selectbox("Size", size_options, index=3, key="shared_f_size") 
         mat = st.selectbox("Frame Material", ["Carbon", "Aluminium"])
         level = st.selectbox("Build Level", ["Entry-Level", "Mid-Level", "High-End"])
-        
-        base = BIKE_WEIGHT_EST[category][mat][{"Entry-Level": 0, "Mid-Level": 1, "High-End": 2}[level]]
-        bike_kg = float(base + SIZE_WEIGHT_MODS[f_size] + (EBIKE_WEIGHT_PENALTY_KG if is_ebike else 0.0))
+
+    # Calculation Logic
+        level_map = {"Entry-Level": 0, "Mid-Level": 1, "High-End": 2}
+        base_val = BIKE_WEIGHT_EST[category][mat][level_map[level]]
+        bike_kg = float(base_val + SIZE_WEIGHT_MODS[f_size] + (EBIKE_WEIGHT_PENALTY_KG if is_ebike else 0.0))
         bike_weight_source = f"Estimate ({mat}/{level})"
+        
+        # Display Row: Shows the result before the next section
+        bike_display_val = bike_kg if unit_mass != "North America (lbs)" else bike_kg * KG_TO_LB
+        st.info(f"**Estimated Bike Weight:** {bike_display_val:.1f} {u_mass_label}")
+        
     else:
         f_size = st.selectbox("Frame Size", size_options, index=3, key="shared_f_size") 
         bike_input = st.number_input(f"Bike Weight ({u_mass_label})", 7.0, 45.0, float(defaults["bike_mass_def_kg"]) + (EBIKE_WEIGHT_PENALTY_KG if is_ebike else 0.0))
