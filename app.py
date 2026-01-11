@@ -186,6 +186,7 @@ defaults = CATEGORY_DATA[category]
 col_c1, col_c2 = st.columns(2)
 with col_c1:
     # 1. BIKE WEIGHT LOGIC
+    size_options = list(SIZE_WEIGHT_MODS.keys())
     weight_mode = st.radio("Bike Weight Mode", ["Manual Input", "Estimate"], horizontal=True)
     if weight_mode == "Estimate":
         f_size = st.selectbox("Size", size_options, key="shared_f_size") 
