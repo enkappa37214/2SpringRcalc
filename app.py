@@ -357,56 +357,72 @@ if raw_rate > 0:
     sag_display = sag_val if unit_len == "Millimetres (mm)" else sag_val * MM_TO_IN
     res_c2.metric("Target Sag", f"{target_sag:.1f}% ({sag_display:.2f} {u_len_label})")
 
-    final_rate_for_tuning = int(round(raw_rate / 25) * 25)
-    
-    # FIX: Initialize variables with safe fallbacks to prevent NameError
-    sprindex_max = final_rate_for_tuning
-    current_rate = final_rate_for_tuning
-    
-    # We re-run the matching logic here or ensure 'chosen_range' was captured earlier
+    # Initialize persistence variables for PDF and Preload
+    current_rate = int(round(raw_rate / 25) * 25)
+    active_range = ""
+
     if "Sprindex" in spring_type_sel:
+        # 1. HARDWARE FAMILY IDENTIFICATION
         family = "XC/Trail (55mm)" if stroke_mm <= 55 else "Enduro (65mm)" if stroke_mm <= 65 else "DH (75mm)"
         ranges = SPRINDEX_DATA[family]["ranges"]
         
-        # Determine the best range if not already captured
-        active_range = ""
-        for r_str in ranges:
+        # 2. MATCHING & GAP LOGIC
+        found_match = False
+        gap_neighbors = []
+        
+        for i, r_str in enumerate(ranges):
             low, high = map(int, r_str.split("-"))
             if low <= raw_rate <= high:
                 active_range = r_str
+                found_match = True
+                st.success(f"**Recommended Sprindex:** {family} | {active_range} lbs/in")
                 break
-        
-        # Fallback if no perfect fit was found in the gap logic above
-        if not active_range:
-            active_range = ranges[0] # Safe default to first range
+            # Logic for when rate is between two specific spring ranges
+            if i > 0:
+                prev_high = int(ranges[i-1].split("-")[1])
+                if prev_high < raw_rate < low:
+                    gap_neighbors = [ranges[i-1], r_str]
 
-        # 1. SPRINDEX DYNAMIC RANGE MAPPING
+        # Handle "In-Between" scenario
+        if not found_match and gap_neighbors:
+            st.warning(f"Calculated rate ({int(raw_rate)} lbs) falls between available hardware ranges.")
+            active_range = st.radio(
+                "Select hardware preference:", 
+                gap_neighbors, 
+                format_func=lambda x: f"{x} lbs (Plush/Lighter)" if x == gap_neighbors[0] else f"{x} lbs (Supportive/Heavier)"
+            )
+            st.info(f"**Selected Sprindex:** {family} | {active_range} lbs/in")
+        elif not found_match and not gap_neighbors:
+            # Fallback for rates outside total family range
+            active_range = ranges[-1] if raw_rate > int(ranges[-1].split("-")[1]) else ranges[0]
+            st.error(f"Rate is outside standard {family} ranges. Showing closest hardware: {active_range}")
+
+        # 3. DYNAMIC RANGE MAPPING TABLE
         try:
             low_bound, high_bound = map(int, active_range.split("-"))
-        except:
-            low_bound, high_bound = 400, 450
+            step = 5 if "DH" not in family else 10
             
-        step = 5 if "XC/Trail" in family or "Enduro" in family else 10
-        st.subheader(f"Sprindex Range Mapping ({active_range} lbs)")
-        
-        range_data = []
-        for r in range(low_bound, high_bound + step, step):
-            r_sag_pct = ((rear_load_lbs * effective_lr / r) / (stroke_mm * MM_TO_IN)) * 100
-            diff = r_sag_pct - target_sag
-            status = "Target" if abs(diff) < 0.5 else "Supportive" if diff < 0 else "Plush"
-            range_data.append({
-                "Dial Index (lbs)": f"{r} lbs",
-                "Resulting Sag": f"{r_sag_pct:.1f}%",
-                "Character": status
-            })
-        
-        st.table(pd.DataFrame(range_data))
-        st.caption(f"Adjust dial in {step}lb increments to refine sag.")
+            st.subheader(f"Sprindex Range Mapping ({active_range} lbs)")
+            range_data = []
+            for r in range(low_bound, high_bound + step, step):
+                r_sag_pct = ((rear_load_lbs * effective_lr / r) / (stroke_mm * MM_TO_IN)) * 100
+                diff = r_sag_pct - target_sag
+                status = "Target" if abs(diff) < 0.5 else "Supportive" if diff < 0 else "Plush"
+                range_data.append({
+                    "Dial Index (lbs)": f"{r} lbs",
+                    "Resulting Sag": f"{r_sag_pct:.1f}%",
+                    "Character": status
+                })
+            st.table(pd.DataFrame(range_data))
+            
+            # Update preload logic to use the max rate of this range
+            current_rate = high_bound
+            st.subheader(f"Fine Tuning (Preload - {high_bound} lbs Max Rate)")
+            st.info("Adjust the Sprindex dial first. Only apply preload if the maximum dial index is reached.")
+            
+        except Exception as e:
+            st.error(f"Error generating mapping table: {e}")
 
-        st.subheader(f"Fine Tuning (Preload - {high_bound} lbs Max Rate)")
-        st.info("Apply preload only if target sag is not met at maximum dial index.")
-        current_rate = high_bound
-        
     else:
         # STANDARD LINEAR SPRING LOGIC
         standard_spring_strokes = [55, 60, 65, 75]
@@ -415,6 +431,7 @@ if raw_rate > 0:
         
         st.markdown(f"**Required Spring Size:** {spring_size_display:.2f} {u_len_label} Stroke")
         center_rate = int(round(raw_rate / 25) * 25)
+        current_rate = center_rate
         
         alt_rates = []
         for r in [center_rate - 50, center_rate - 25, center_rate, center_rate + 25, center_rate + 50]:
@@ -425,12 +442,10 @@ if raw_rate > 0:
                 "Resulting Sag": f"{r_sag_pct:.1f}%", 
                 "Feel": "Plush" if r < center_rate else "Supportive" if r > center_rate else "Target"
             })
-        
         st.table(alt_rates)
-        st.subheader(f"Fine Tuning (Preload - {final_rate_for_tuning} lbs spring)")
-        current_rate = final_rate_for_tuning
+        st.subheader(f"Fine Tuning (Preload - {center_rate} lbs spring)")
 
-    # PRELOAD TABLE
+    # 4. PRELOAD TABLE (Unified)
     preload_results = []
     for turns in [1.0, 1.5, 2.0, 2.5, 3.0]:
         sag_val_calc = (rear_load_lbs * effective_lr / current_rate) - (turns * 1.0 * MM_TO_IN)
@@ -442,7 +457,7 @@ if raw_rate > 0:
         })
     st.dataframe(pd.DataFrame(preload_results), hide_index=True)
 
-    # --- PDF GENERATION (FIXED SCOPE) ---
+    # --- PDF GENERATION ---
     def generate_pdf():
         pdf = FPDF()
         pdf.add_page()
