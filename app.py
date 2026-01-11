@@ -189,7 +189,7 @@ with col_c1:
     size_options = list(SIZE_WEIGHT_MODS.keys())
     weight_mode = st.radio("Bike Weight Mode", ["Manual Input", "Estimate"], horizontal=True)
     if weight_mode == "Estimate":
-        f_size = st.selectbox("Size", size_options, key="shared_f_size") 
+        f_size = st.selectbox("Size", size_options, index=3, key="shared_f_size") 
         mat = st.selectbox("Frame Material", ["Carbon", "Aluminium"])
         level = st.selectbox("Build Level", ["Entry-Level", "Mid-Level", "High-End"])
         
