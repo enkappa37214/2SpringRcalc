@@ -364,106 +364,98 @@ if raw_rate > 0:
     sag_display = sag_val if unit_len == "Millimetres (mm)" else sag_val * MM_TO_IN
     res_c2.metric("Target Sag", f"{target_sag:.1f}% ({sag_display:.2f} {u_len_label})")
 
-    # Initialize persistence variables for PDF and Preload
     current_rate = int(round(raw_rate / 25) * 25)
     active_range = ""
 
+    # --- BRANCH 1: SPRINDEX LOGIC ---
     if "Sprindex" in spring_type_sel:
-        # 1. HARDWARE FAMILY IDENTIFICATION
         family = "XC/Trail (55mm)" if stroke_mm <= 55 else "Enduro (65mm)" if stroke_mm <= 65 else "DH (75mm)"
         ranges = SPRINDEX_DATA[family]["ranges"]
-        
-        # 2. MATCHING & GAP LOGIC
-        found_match = False
-        gap_neighbors = []
+        found_match, gap_neighbors = False, []
         
         for i, r_str in enumerate(ranges):
             low, high = map(int, r_str.split("-"))
             if low <= raw_rate <= high:
-                active_range = r_str
-                found_match = True
+                active_range, found_match = r_str, True
                 st.success(f"**Recommended Sprindex:** {family} | {active_range} lbs/in")
                 break
-            # Logic for when rate is between two specific spring ranges
             if i > 0:
                 prev_high = int(ranges[i-1].split("-")[1])
                 if prev_high < raw_rate < low:
                     gap_neighbors = [ranges[i-1], r_str]
 
-        # Handle "In-Between" scenario
         if not found_match and gap_neighbors:
-            st.warning(f"Calculated rate ({int(raw_rate)} lbs) falls between available hardware ranges.")
-            active_range = st.radio(
-                "Select hardware preference:", 
-                gap_neighbors, 
-                format_func=lambda x: f"{x} lbs (Plush/Lighter)" if x == gap_neighbors[0] else f"{x} lbs (Supportive/Heavier)"
-            )
-            st.info(f"**Selected Sprindex:** {family} | {active_range} lbs/in")
-        elif not found_match and not gap_neighbors:
-            # Fallback for rates outside total family range
-            active_range = ranges[-1] if raw_rate > int(ranges[-1].split("-")[1]) else ranges[0]
-            st.error(f"Rate is outside standard {family} ranges. Showing closest hardware: {active_range}")
+            st.warning(f"Calculated rate ({int(raw_rate)} lbs) falls between hardware ranges.")
+            active_range = st.radio("Select hardware preference:", gap_neighbors)
+        
+        low_bound, high_bound = map(int, active_range.split("-"))
+        step = 5 if "DH" not in family else 10
+        st.subheader(f"Sprindex Range Mapping ({active_range} lbs)")
+        range_data = []
+        for r in range(low_bound, high_bound + step, step):
+            r_sag_pct = ((rear_load_lbs * effective_lr / r) / (stroke_mm * MM_TO_IN)) * 100
+            diff = r_sag_pct - target_sag
+            status = "Target" if abs(diff) < 0.5 else "Supportive" if diff < 0 else "Plush"
+            range_data.append({"Dial Index (lbs)": f"{r} lbs", "Resulting Sag": f"{r_sag_pct:.1f}%", "Character": status})
+        st.table(pd.DataFrame(range_data))
+        current_rate = high_bound
 
-        # 3. DYNAMIC RANGE MAPPING TABLE
-        try:
-            low_bound, high_bound = map(int, active_range.split("-"))
-            step = 5 if "DH" not in family else 10
+    # --- BRANCH 2: PROGRESSIVE SPRING LOGIC ---
+    elif "Progressive Spring" in spring_type_sel:
+        st.subheader("Progressive Spring Recommendation")
+        st.info("Progressive springs are rated by their initial (start) rate. Final sag is determined by the initial rate.")
+        
+        # Identify closest progressive hardware based on start rate
+        # We look for the start rate closest to our calculated sag rate
+        closest_prog = min(PROGRESSIVE_SPRING_DATA, key=lambda x: abs(x["start"] - raw_rate))
+        
+        prog_table = []
+        for p_model in PROGRESSIVE_SPRING_DATA:
+            # Resulting sag is a function of the start rate
+            p_sag_pct = ((rear_load_lbs * effective_lr / p_model["start"]) / (stroke_mm * MM_TO_IN)) * 100
+            diff = p_sag_pct - target_sag
             
-            st.subheader(f"Sprindex Range Mapping ({active_range} lbs)")
-            range_data = []
-            for r in range(low_bound, high_bound + step, step):
-                r_sag_pct = ((rear_load_lbs * effective_lr / r) / (stroke_mm * MM_TO_IN)) * 100
-                diff = r_sag_pct - target_sag
-                status = "Target" if abs(diff) < 0.5 else "Supportive" if diff < 0 else "Plush"
-                range_data.append({
-                    "Dial Index (lbs)": f"{r} lbs",
-                    "Resulting Sag": f"{r_sag_pct:.1f}%",
-                    "Character": status
-                })
-            st.table(pd.DataFrame(range_data))
+            # Label based on proximity to target
+            status = "Target Match" if p_model == closest_prog else "Alternative"
+            feel = "Plush" if p_model["start"] < closest_prog["start"] else "Firm" if p_model["start"] > closest_prog["start"] else "Balanced"
             
-            # Update preload logic to use the max rate of this range
-            current_rate = high_bound
-            st.subheader(f"Fine Tuning (Preload - {high_bound} lbs Max Rate)")
-            st.info("Adjust the Sprindex dial first. Only apply preload if the maximum dial index is reached.")
-            
-        except Exception as e:
-            st.error(f"Error generating mapping table: {e}")
+            prog_table.append({
+                "Model": p_model["model"],
+                "Start Rate": f"{p_model['start']} lbs",
+                "End Rate": f"{p_model['end']} lbs",
+                "Ramp (%)": f"+{p_model['prog']}%",
+                "Resulting Sag": f"{p_sag_pct:.1f}%",
+                "Character": feel if status == "Alternative" else "Target"
+            })
+        
+        st.table(pd.DataFrame(prog_table))
+        st.warning("Warning: Progressive springs increase end-stroke support but may require less damping (HSC) to avoid harshness.")
+        current_rate = closest_prog["start"]
 
+    # --- BRANCH 3: STANDARD LINEAR LOGIC ---
     else:
-        # STANDARD LINEAR SPRING LOGIC
         standard_spring_strokes = [55, 60, 65, 75]
         required_stroke_mm = next((s for s in standard_spring_strokes if s >= stroke_mm), 75)
         spring_size_display = required_stroke_mm if unit_len == "Millimetres (mm)" else required_stroke_mm * MM_TO_IN
-        
         st.markdown(f"**Required Spring Size:** {spring_size_display:.2f} {u_len_label} Stroke")
         center_rate = int(round(raw_rate / 25) * 25)
         current_rate = center_rate
-        
         alt_rates = []
         for r in [center_rate - 50, center_rate - 25, center_rate, center_rate + 25, center_rate + 50]:
             if r <= 0: continue
             r_sag_pct = ((rear_load_lbs * effective_lr / r) / (stroke_mm * MM_TO_IN)) * 100
-            alt_rates.append({
-                "Rate (lbs)": f"{r} lbs", 
-                "Resulting Sag": f"{r_sag_pct:.1f}%", 
-                "Feel": "Plush" if r < center_rate else "Supportive" if r > center_rate else "Target"
-            })
+            alt_rates.append({"Rate (lbs)": f"{r} lbs", "Resulting Sag": f"{r_sag_pct:.1f}%", "Feel": "Plush" if r < center_rate else "Supportive" if r > center_rate else "Target"})
         st.table(alt_rates)
-        st.subheader(f"Fine Tuning (Preload - {center_rate} lbs spring)")
 
-    # 4. PRELOAD TABLE (Unified)
+    # Unified Preload Table (Calculated from current_rate)
+    st.subheader(f"Fine Tuning (Preload - {current_rate} lbs spring)")
     preload_results = []
     for turns in [1.0, 1.5, 2.0, 2.5, 3.0]:
         sag_val_calc = (rear_load_lbs * effective_lr / current_rate) - (turns * 1.0 * MM_TO_IN)
         sag_pct = (sag_val_calc / (stroke_mm * MM_TO_IN)) * 100
-        preload_results.append({
-            "Turns": turns, 
-            "Sag (%)": f"{max(0, sag_pct):.1f}%", 
-            "Status": "OK" if 1.0 <= turns <= 2.0 else "Caution"
-        })
+        preload_results.append({"Turns": turns, "Sag (%)": f"{max(0, sag_pct):.1f}%", "Status": "OK" if 1.0 <= turns <= 2.0 else "Caution"})
     st.dataframe(pd.DataFrame(preload_results), hide_index=True)
-
+    
     # --- PDF GENERATION ---
     def generate_pdf():
         pdf = FPDF()
