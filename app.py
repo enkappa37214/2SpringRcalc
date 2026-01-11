@@ -248,7 +248,7 @@ with col_inputs:
         unsprung_source = "Manual"
 
 with col_summary:
-    st.subheader("Mass Distribution")
+    st.subheader("Dynamic Mass Distribution")
     if 'rear_bias_slider' not in st.session_state: 
         st.session_state.rear_bias_slider = defaults["bias"]
     
