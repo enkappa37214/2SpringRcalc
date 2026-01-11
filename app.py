@@ -456,7 +456,7 @@ if raw_rate > 0:
         preload_results.append({"Turns": turns, "Sag (%)": f"{max(0, sag_pct):.1f}%", "Status": "OK" if 1.0 <= turns <= 2.0 else "Caution"})
     st.dataframe(pd.DataFrame(preload_results), hide_index=True)
     
-    # --- PDF GENERATION ---
+    # --- PDF GENERATION (STANDARDISED FOR ALL SPRING TYPES) ---
     def generate_pdf():
         pdf = FPDF()
         pdf.add_page()
@@ -474,36 +474,45 @@ if raw_rate > 0:
         pdf.ln(5); pdf.set_font("Arial", 'B', 12); pdf.cell(200, 10, "2. Setup Guide", ln=True)
         pdf.set_font("Arial", size=10); pdf.cell(200, 8, f"Spring Type: {spring_type_sel}", ln=True)
         
-        # FIXED: Recalculate or safely fetch range data for PDF scope
+        # Branch-specific Hardware Details
         if "Sprindex" in spring_type_sel:
-            # Re-derive range for PDF context
             pdf_family = "XC/Trail (55mm)" if stroke_mm <= 55 else "Enduro (65mm)" if stroke_mm <= 65 else "DH (75mm)"
-            pdf_ranges = SPRINDEX_DATA[pdf_family]["ranges"]
-            pdf_active_range = next((r for r in pdf_ranges if int(r.split("-")[0]) <= raw_rate <= int(r.split("-")[1])), pdf_ranges[0])
-            
             pdf.cell(200, 8, f"Hardware Family: {pdf_family}", ln=True)
-            pdf.cell(200, 8, f"Recommended Range: {pdf_active_range} lbs", ln=True)
+            pdf.cell(200, 8, f"Recommended Range: {active_range} lbs", ln=True)
+        elif "Progressive Spring" in spring_type_sel:
+            # Safely fetch the closest model identified in results
+            pdf.cell(200, 8, f"Recommended Model: {closest_prog['model']}", ln=True)
+            pdf.cell(200, 8, f"Ramp-up: +{closest_prog['prog']}%", ln=True)
         else:
-            pdf.cell(200, 8, f"Required Size: {spring_size_display:.2f} {u_len_label} Stroke", ln=True)
+            # Fallback for standard springs
+            pdf_size = next((s for s in [55, 60, 65, 75] if s >= stroke_mm), 75)
+            pdf_size_display = pdf_size if unit_len == "Millimetres (mm)" else pdf_size * MM_TO_IN
+            pdf.cell(200, 8, f"Required Size: {pdf_size_display:.2f} {u_len_label} Stroke", ln=True)
         
-        pdf.ln(5); pdf.set_font("Arial", 'B', 12); pdf.cell(200, 10, "3. Alternative Rates / Mapping", ln=True)
-        # Use alt_rates or range_data if they exist in local scope, else provide a placeholder
+        pdf.ln(5); pdf.set_font("Arial", 'B', 12); pdf.cell(200, 10, "3. Rate Mapping / Options", ln=True)
+        
+        # Standardise and print the mapping table
         try:
-            target_list = range_data if "Sprindex" in spring_type_sel else alt_rates
+            if "Sprindex" in spring_type_sel:
+                target_list, rate_key, char_key = range_data, "Dial Index (lbs)", "Character"
+            elif "Progressive Spring" in spring_type_sel:
+                target_list, rate_key, char_key = prog_table, "Model", "Character"
+            else:
+                target_list, rate_key, char_key = alt_rates, "Rate (lbs)", "Feel"
+
             for r_row in target_list:
-                # Standardising key names for PDF printing
-                rate_val = r_row.get('Dial Index (lbs)') or r_row.get('Rate (lbs)')
-                sag_val = r_row.get('Resulting Sag')
-                feel_val = r_row.get('Character') or r_row.get('Feel')
-                pdf.cell(200, 8, f"{rate_val}: {sag_val} ({feel_val})", ln=True)
-        except NameError:
-            pdf.cell(200, 8, "Rate mapping data unavailable for PDF export.", ln=True)
+                r_rate = r_row[rate_key]
+                r_sag = r_row["Resulting Sag"]
+                r_char = r_row[char_key]
+                pdf.cell(200, 8, f"{r_rate}: {r_sag} ({r_char})", ln=True)
+        except Exception:
+            pdf.cell(200, 8, "Mapping data unavailable for this selection.", ln=True)
         
         pdf.ln(10); pdf.set_font("Arial", 'I', 9)
         pdf.multi_cell(0, 5, "Engineering Disclaimer: Actual requirements may deviate due to damper valving, friction, and dynamic riding loads. Physical verification via sag measurement is mandatory.")
         return pdf.output(dest="S").encode("latin-1")
     
-    # Download Button Trigger
+    # Download Button with error prevention
     try:
         pdf_bytes = generate_pdf()
         st.download_button(
@@ -513,7 +522,7 @@ if raw_rate > 0:
             mime="application/pdf"
         )
     except Exception as e:
-        st.error(f"PDF Generation Error: Ensure all fields are filled. ({e})")
+        st.error(f"PDF Generation Error: {e}")
         
 # --- LOGGING ---
 st.divider(); st.subheader("Configuration Log")
