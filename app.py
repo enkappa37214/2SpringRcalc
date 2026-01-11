@@ -150,8 +150,8 @@ with col_r2:
 # --- CHASSIS DATA ---
 st.header("2. Chassis Data")
 
-# Top Level Configuration: Unitary horizontal row
-config_col1, config_col2 = st.columns([0.5, 0.5])
+# Top Level Configuration: Standardized 50/50 split
+config_col1, config_col2 = st.columns(2)
 with config_col1:
     chassis_type = st.radio("Chassis Configuration", ["Analog Bike", "E-Bike"], horizontal=True)
     is_ebike = (chassis_type == "E-Bike")
@@ -199,8 +199,8 @@ defaults = CATEGORY_DATA[category]
 
 st.divider()
 
-# Mass Estimation & Input logic
-col_inputs, col_summary = st.columns([0.6, 0.4])
+# UPDATED: Standardized 50/50 split for Inputs and Summary
+col_inputs, col_summary = st.columns(2)
 
 with col_inputs:
     size_options = list(SIZE_WEIGHT_MODS.keys())
@@ -226,8 +226,7 @@ with col_inputs:
         
     st.markdown("---")
 
-    # 2. UNSPRUNG MASS LOGIC (UPDATED WITH CONDITIONAL DEFAULT)
-    # Toggle is True by default if weight_mode is "Estimate"
+    # 2. UNSPRUNG MASS LOGIC
     unsprung_default = True if weight_mode == "Estimate" else False
     unsprung_mode = st.toggle("Estimate Unsprung Mass", value=unsprung_default)
     
@@ -252,9 +251,8 @@ with col_inputs:
         unsprung_input = st.number_input(f"Unsprung ({u_mass_label})", 0.0, 25.0, 4.27 + (2.0 if is_ebike else 0.0), 0.1)
         unsprung_kg = float(unsprung_input * LB_TO_KG if unit_mass == "North America (lbs)" else unsprung_input)
         unsprung_source = "Manual"
-        
+
 with col_summary:
-    # Dedicated Summary Panel for Mass Distribution
     st.subheader("Mass Distribution")
     if 'rear_bias_slider' not in st.session_state: 
         st.session_state.rear_bias_slider = defaults["bias"]
@@ -262,24 +260,26 @@ with col_summary:
     st.markdown(f"**Category Base:** {defaults['bias']}%")
     st.markdown(f"**Skill Recommendation:** {SKILL_MODIFIERS[skill]['bias']:+d}% ({skill})")
     
-    final_bias_calc = st.slider("Rear Wheel Bias (%)", 55, 80, key="rear_bias_slider")
+    final_bias_calc = st.slider("Rear Bias (%)", 55, 80, key="rear_bias_slider")
     
     total_system_kg = rider_kg + gear_kg + bike_kg
     sprung_mass_kg = total_system_kg - unsprung_kg
     rear_val_kg = (sprung_mass_kg * (final_bias_calc/100)) + (unsprung_kg if final_bias_calc > 0 else 0)
-    
     front_val = total_system_kg - rear_val_kg
     
     st.write("---")
-    st.metric("Total System Mass", f"{total_system_kg:.1f} {u_mass_label}")
+    # Normalized labels for the metrics
+    total_display = total_system_kg if unit_mass != "North America (lbs)" else total_system_kg * KG_TO_LB
+    front_display = front_val if unit_mass != "North America (lbs)" else front_val * KG_TO_LB
+    rear_display = rear_val_kg if unit_mass != "North America (lbs)" else rear_val_kg * KG_TO_LB
     
-    # Visual distribution bar
+    st.metric("Total System Mass", f"{total_display:.1f} {u_mass_label}")
     st.progress(final_bias_calc / 100)
     
-    c_res1, c_res2 = st.columns(2)
-    with c_res1: st.metric("Front Load", f"{front_val:.1f} {u_mass_label}")
-    with c_res2: st.metric("Rear Load", f"{rear_val_kg:.1f} {u_mass_label}")
-
+    res_sub1, res_sub2 = st.columns(2)
+    with res_sub1: st.metric("Front Load", f"{front_display:.1f} {u_mass_label}")
+    with res_sub2: st.metric("Rear Load", f"{rear_display:.1f} {u_mass_label}")
+        
 # --- KINEMATICS ---
 st.header("3. Shock & Kinematics")
 col_k1, col_k2 = st.columns(2)
