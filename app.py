@@ -210,35 +210,27 @@ with col_c1:
         bike_weight_source = "Manual"
         
     # 2. UNSPRUNG MASS LOGIC
-    # 2. UNSPRUNG MASS LOGIC (FIXED INDENTATION)
     unsprung_mode = st.toggle("Estimate Unsprung Mass", value=False)
     if unsprung_mode:
         u_tier = st.selectbox("Wheelset Tier", ["Light", "Standard", "Heavy"], index=1)
-        
-        # Tyre Casing Input for higher precision
         u_casing = st.selectbox("Tyre Casing", ["XC (Lightweight)", "Trail (Standard)", "Enduro (Reinforced)", "DH (Dual-ply)"], index=1)
-        
         u_mat = st.selectbox("Rear Triangle Material", ["Carbon", "Aluminium"], index=1)
         inserts = st.checkbox("Tyre Inserts?")
         
-        # Base component mapping
+        # Physics Constants
         wheels = {"Light": 1.7, "Standard": 2.3, "Heavy": 3.0}[u_tier]
-        
-        # Tyre Casing mapping
         casings = {"XC (Lightweight)": 0.7, "Trail (Standard)": 0.95, "Enduro (Reinforced)": 1.25, "DH (Dual-ply)": 1.5}
         tyre_mass = casings[u_casing]
-        
-        # Size-specific swingarm correction
         swingarm_base = 0.4 if u_mat == "Carbon" else 0.7
         size_factor = SIZE_WEIGHT_MODS[f_size] * 0.15 
-        swingarm_final = swingarm_base + size_factor
-
-        # Final Summation
-        unsprung_kg = tyre_mass + wheels + swingarm_final + (0.5 if inserts else 0.0) + (1.5 if is_ebike else 0.0)
         
-        # Update logging source
+        # Final Metric Calculation (Kg)
+        unsprung_kg = tyre_mass + wheels + (swingarm_base + size_factor) + (0.5 if inserts else 0.0) + (1.5 if is_ebike else 0.0)
         unsprung_source = f"Estimate ({u_tier}/{u_casing}/{u_mat})"
-        st.caption(f"Estimated unsprung: {unsprung_kg:.2f} kg")
+        
+        # UI DISPLAY: Standardised formatting
+        u_display_val = unsprung_kg if unit_mass != "North America (lbs)" else unsprung_kg * KG_TO_LB
+        st.info(f"**Estimated Unsprung Mass:** {u_display_val:.2f} {u_mass_label}")
     else:
         unsprung_input = st.number_input(f"Unsprung ({u_mass_label})", 0.0, 25.0, 4.27 + (2.0 if is_ebike else 0.0), 0.1)
         unsprung_kg = float(unsprung_input * LB_TO_KG if unit_mass == "North America (lbs)" else unsprung_input)
