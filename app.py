@@ -156,7 +156,7 @@ with col_r2:
         rider_kg = st.number_input("Rider Weight (kg)", 40.0, 130.0, 68.0, 0.5, format="%0.1f")
     
     gear_def = 5.0 if unit_mass == "North America (lbs)" else 4.0
-    gear_input = st.number_input(f"Gear Weight ({u_mass_label})", 0.0, 25.0, float(gear_def), 0.5, format="%0.1f")
+    gear_input = st.number_input(f"Gear Weight ({u_mass_label})", 0.0, 25.0, float(gear_def), 0.1, format="%0.1f")
     gear_kg = gear_input * LB_TO_KG if unit_mass == "North America (lbs)" else gear_input
 
 # --- CHASSIS DATA ---
