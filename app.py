@@ -4,6 +4,12 @@ import datetime
 import numpy as np
 from fpdf import FPDF
 from streamlit_gsheets import GSheetsConnection
+import locale
+# Set locale to 'C' or 'en_US' to standardise dot decimal separators
+try:
+    locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
+except locale.Error:
+    locale.setlocale(locale.LC_ALL, 'C')
 
 # ==========================================================
 # 1. CONFIGURATION & DATA CONSTANTS
