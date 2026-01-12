@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import datetime
 import numpy as np
+import io
 from fpdf import FPDF
 from streamlit_gsheets import GSheetsConnection
 
@@ -23,7 +24,6 @@ IN_TO_MM, MM_TO_IN = 25.4, 1/25.4
 STONE_TO_KG = 6.35029
 PROGRESSIVE_CORRECTION_FACTOR = 0.97
 EBIKE_WEIGHT_PENALTY_KG = 8.5
-# FIX: Added 52.5 for Intense Tracer compatibility
 COMMON_STROKES = [45.0, 50.0, 52.5, 55.0, 57.5, 60.0, 62.5, 65.0, 70.0, 75.0]
 
 CATEGORY_DATA = {
@@ -32,13 +32,12 @@ CATEGORY_DATA = {
     "All-Mountain": {"travel": 145, "stroke": 55.0, "base_sag": 31.0, "progression": 21.0, "lr_start": 2.92, "desc": "140–150 mm", "bike_mass_def_kg": 14.5, "bias": 65.0},
     "Enduro": {"travel": 160, "stroke": 60.0, "base_sag": 33.0, "progression": 23.0, "lr_start": 3.02, "desc": "150–170 mm", "bike_mass_def_kg": 15.10, "bias": 67.0},
     "Long Travel Enduro": {"travel": 175, "stroke": 65.0, "base_sag": 34.0, "progression": 27.0, "lr_start": 3.16, "desc": "170–180 mm", "bike_mass_def_kg": 16.5, "bias": 69.0},
-    "Enduro (Race focus)": {"travel": 165, "stroke": 62.5, "base_sag": 32.0, "progression": 26.0, "lr_start": 3.13, "desc": "160–170 mm", "bike_mass_def_kg": 15.8, "bias": 68.0},
     "Downhill (DH)": {"travel": 200, "stroke": 75.0, "base_sag": 35.0, "progression": 28.0, "lr_start": 3.28, "desc": "180–210 mm", "bike_mass_def_kg": 17.5, "bias": 72.0}
 }
 
 SKILL_MODIFIERS = {"just_starting": {"bias": 4.0}, "beginner": {"bias": 2.0}, "intermediate": {"bias": 0.0}, "advanced": {"bias": -1.0}, "racer": {"bias": -2.0}}
 SKILL_LEVELS = ["Just starting", "Beginner", "Intermediate", "Advanced", "Racer"]
-COUPLING_COEFFS = {"Downcountry": 0.80, "Trail": 0.75, "All-Mountain": 0.70, "Enduro": 0.72, "Long Travel Enduro": 0.90, "Enduro (Race focus)": 0.78, "Downhill (DH)": 0.95}
+COUPLING_COEFFS = {"Downcountry": 0.80, "Trail": 0.75, "All-Mountain": 0.70, "Enduro": 0.72, "Long Travel Enduro": 0.90, "Downhill (DH)": 0.95}
 SIZE_WEIGHT_MODS = {"XS": -0.5, "S": -0.25, "M": 0.0, "L": 0.3, "XL": 0.6, "XXL": 0.95}
 
 BIKE_WEIGHT_EST = {
@@ -47,7 +46,6 @@ BIKE_WEIGHT_EST = {
     "All-Mountain": {"Carbon": [15.0, 14.2, 13.5], "Aluminium": [16.2, 15.5, 14.8]},
     "Enduro": {"Carbon": [16.2, 15.5, 14.8], "Aluminium": [17.5, 16.6, 15.8]},
     "Long Travel Enduro": {"Carbon": [16.8, 16.0, 15.2], "Aluminium": [18.0, 17.2, 16.5]},
-    "Enduro (Race focus)": {"Carbon": [16.0, 15.2, 14.5], "Aluminium": [17.2, 16.3, 15.5]},
     "Downhill (DH)": {"Carbon": [17.8, 17.0, 16.2], "Aluminium": [19.5, 18.5, 17.5]}
 }
 
@@ -71,14 +69,34 @@ PROGRESSIVE_SPRING_DATA = [
 # ==========================================================
 @st.cache_data
 def load_bike_database():
+    file_path = "clean_suspension_database.csv"
+    required_cols = ['Model', 'Travel_mm', 'Shock_Stroke']
+    df = pd.DataFrame()
+    
+    # Attempt 1: Standard Load
     try:
-        # FIX: Using clean_suspension_database.csv as requested
-        df = pd.read_csv("clean_suspension_database.csv")
-        for c in ['Travel_mm', 'Shock_Stroke', 'Start_Leverage', 'End_Leverage', 'Progression_Pct']:
-            df[c] = pd.to_numeric(df[c], errors='coerce')
+        df = pd.read_csv(file_path)
+        # Check if load was messy (e.g. 1 column instead of many)
+        if len(df.columns) < 2: 
+            raise ValueError("Malformed CSV")
+    except Exception:
+        # Attempt 2: Fix Malformed Quoting (Excel artifact)
+        try:
+            with open(file_path, "r") as f:
+                lines = [line.strip().strip('"') for line in f]
+            df = pd.read_csv(io.StringIO("\n".join(lines)))
+        except Exception:
+            return pd.DataFrame()
+
+    # Final Validation & Typing
+    if not df.empty and 'Model' in df.columns:
+        numeric_cols = ['Travel_mm', 'Shock_Stroke', 'Start_Leverage', 'End_Leverage', 'Progression_Pct']
+        for c in numeric_cols:
+            if c in df.columns:
+                df[c] = pd.to_numeric(df[c], errors='coerce')
         return df.fillna(0).sort_values('Model')
-    except Exception as e:
-        return pd.DataFrame() # Returns empty if file missing
+    
+    return pd.DataFrame()
 
 def analyze_spring_compatibility(progression_pct, has_hbo):
     analysis = {"Linear": {"status": "", "msg": ""}, "Progressive": {"status": "", "msg": ""}}
@@ -87,11 +105,11 @@ def analyze_spring_compatibility(progression_pct, has_hbo):
         analysis["Progressive"]["status"] = "Caution Avoid"; analysis["Progressive"]["msg"] = "Risk of harsh Wall Effect."
     elif 12 <= progression_pct <= 25:
         analysis["Linear"]["status"] = "OK Compatible"; analysis["Linear"]["msg"] = "Use for a plush coil feel."
-        analysis["Progressive"]["status"] = "OK Compatible"; analysis["Progressive"]["msg"] = "Use for more pop and bottom-out resistance."
+        analysis["Progressive"]["status"] = "OK Compatible"; analysis["Progressive"]["msg"] = "Use for more pop."
         if has_hbo: analysis["Linear"]["msg"] += " (HBO handles bottom-out)."
     else:
-        analysis["Linear"]["status"] = "Caution"; analysis["Linear"]["msg"] = "High risk of bottom-out without strong HBO."
-        analysis["Progressive"]["status"] = "OK Optimal"; analysis["Progressive"]["msg"] = "Essential to compensate for lack of ramp-up."
+        analysis["Linear"]["status"] = "Caution"; analysis["Linear"]["msg"] = "High bottom-out risk."
+        analysis["Progressive"]["status"] = "OK Optimal"; analysis["Progressive"]["msg"] = "Compensates for lack of ramp-up."
     return analysis
 
 def update_bias_from_category():
@@ -106,7 +124,6 @@ def update_category_from_bike():
         bike_row = bike_db[bike_db['Model'] == selected_model].iloc[0]
         t = bike_row['Travel_mm']
         cat_keys = list(CATEGORY_DATA.keys())
-        # Safe default category logic
         if t < 125: cat_name = cat_keys[0]
         elif t < 140: cat_name = cat_keys[1]
         elif t < 155: cat_name = cat_keys[2]
@@ -145,7 +162,7 @@ col_r1, col_r2 = st.columns(2)
 with col_r1: 
     skill = st.selectbox("Rider Skill", SKILL_LEVELS, index=2)
     skill_key = skill.lower().replace(" ", "_")
-    skill_bias = SKILL_MODIFIERS.get(skill_key, {"bias": 0})["bias"]
+    skill_bias = float(SKILL_MODIFIERS.get(skill_key, {"bias": 0})["bias"])
 
 with col_r2:
     if unit_mass == "UK Hybrid (st & kg)":
@@ -154,13 +171,13 @@ with col_r2:
         rider_kg = (stone * STONE_TO_KG) + (lbs_rem * LB_TO_KG)
     elif unit_mass == "North America (lbs)":
         rider_in = st.number_input("Rider Weight (lbs)", 90.0, 280.0, 160.0, 1.0)
-        rider_kg = rider_in * LB_TO_KG
+        rider_kg = float(rider_in * LB_TO_KG)
     else:
-        rider_kg = st.number_input("Rider Weight (kg)", 40.0, 130.0, 68.0, 0.5)
+        rider_kg = float(st.number_input("Rider Weight (kg)", 40.0, 130.0, 68.0, 0.5))
     
     gear_def = 5.0 if unit_mass == "North America (lbs)" else 4.0
     gear_input = st.number_input(f"Gear Weight ({u_mass_label})", 0.0, 25.0, float(gear_def), 0.5)
-    gear_kg = gear_input * LB_TO_KG if unit_mass == "North America (lbs)" else gear_input
+    gear_kg = float(gear_input * LB_TO_KG if unit_mass == "North America (lbs)" else gear_input)
 
 # --- CHASSIS DATA ---
 st.header("2. Chassis Data")
@@ -191,8 +208,8 @@ with col_search:
         )
         if selected_model:
             selected_bike_data, is_db_bike, bike_model_log = bike_db[bike_db['Model'] == selected_model].iloc[0], True, selected_model
-    else:
-        st.error("Database file 'clean_suspension_database.csv' not found or empty.")
+    elif not manual_entry_mode:
+        st.warning("Database failed to load. Please use Manual Entry.")
 
 if manual_entry_mode:
     st.info("Community Contribution: Global database enrichment.")
@@ -290,26 +307,24 @@ with col_summary:
     with res_sub1: st.metric("Front Load", f"{front_display:.1f} {u_mass_label}")
     with res_sub2: st.metric("Rear Load", f"{rear_display:.1f} {u_mass_label}")
 
-        
 # --- KINEMATICS ---
 st.header("3. Shock & Kinematics")
 col_k1, col_k2 = st.columns(2)
 
-if is_db_bike:
-    raw_travel, raw_stroke, raw_prog, raw_lr_start = float(selected_bike_data['Travel_mm']), float(selected_bike_data['Shock_Stroke']), float(selected_bike_data['Progression_Pct']), float(selected_bike_data['Start_Leverage'])
-else:
-    raw_travel, raw_stroke, raw_prog, raw_lr_start = 165.0, 62.5, float(defaults["progression"]), float(defaults["lr_start"])
+raw_travel = float(selected_bike_data['Travel_mm']) if selected_bike_data is not None else 165.0
+raw_stroke = float(selected_bike_data['Shock_Stroke']) if selected_bike_data is not None else 62.5
+raw_prog = float(selected_bike_data['Progression_Pct']) if selected_bike_data is not None else float(defaults["progression"])
+raw_lr_start = float(selected_bike_data['Start_Leverage']) if selected_bike_data is not None else float(defaults["lr_start"])
 
 with col_k1:
     travel_in = st.number_input(f"Rear Travel ({u_len_label})", 0.0, 300.0, float(raw_travel if unit_len == "Millimetres (mm)" else raw_travel * MM_TO_IN), 1.0)
     
-    # FIX: Robust check for common strokes
     if unit_len == "Inches (\")":
         stroke_in = st.number_input(f"Shock Stroke ({u_len_label})", 1.5, 5.0, raw_stroke * MM_TO_IN, 0.1, disabled=is_db_bike)
         stroke_mm = stroke_in * IN_TO_MM
     else:
-        # Check if stroke exists in common list, fallback to nearest or index 4
-        stroke_idx = 4
+        # FIX: Robust default selection for selectbox
+        stroke_idx = 6 # Default to 62.5mm
         if raw_stroke in COMMON_STROKES:
             stroke_idx = COMMON_STROKES.index(raw_stroke)
         stroke_mm = st.selectbox(f"Shock Stroke ({u_len_label})", COMMON_STROKES, index=stroke_idx, disabled=is_db_bike)
@@ -356,7 +371,7 @@ with st.container():
         elif "Linear" in spring_type_sel and "Caution" in analysis["Linear"]["status"]:
             st.warning("⚠️ Disclaimer: Low frame progression risk.")
         
-        st.info("⚠️ Hardware Note: Verify Spring Internal Diameter (ID). Common standards include 35mm (Ohlins, Cane Creek) and 38mm (Fox, Marzocchi). Ensure compatible performance adapters are used to prevent binding.")
+        st.info("⚠️ Hardware Note: Verify Spring Internal Diameter (ID). Common standards include 35mm (Ohlins, Cane Creek) and 38mm (Fox, Marzocchi).")
 
 # ==========================================================
 # 4. CALCULATIONS
@@ -434,17 +449,11 @@ if raw_rate > 0:
         st.subheader("Progressive Spring Recommendation")
         st.info("Progressive springs are rated by their initial (start) rate. Final sag is determined by the initial rate.")
         
-        # Identify closest progressive hardware based on start rate
-        # We look for the start rate closest to our calculated sag rate
         closest_prog = min(PROGRESSIVE_SPRING_DATA, key=lambda x: abs(x["start"] - raw_rate))
         
         prog_table = []
         for p_model in PROGRESSIVE_SPRING_DATA:
-            # Resulting sag is a function of the start rate
             p_sag_pct = ((rear_load_lbs * effective_lr / p_model["start"]) / (stroke_mm * MM_TO_IN)) * 100
-            diff = p_sag_pct - target_sag
-            
-            # Label based on proximity to target
             status = "Target Match" if p_model == closest_prog else "Alternative"
             feel = "Plush" if p_model["start"] < closest_prog["start"] else "Firm" if p_model["start"] > closest_prog["start"] else "Balanced"
             
@@ -484,7 +493,7 @@ if raw_rate > 0:
         preload_results.append({"Turns": turns, "Sag (%)": f"{max(0, sag_pct):.1f}%", "Status": "OK" if 1.0 <= turns <= 2.0 else "Caution"})
     st.dataframe(pd.DataFrame(preload_results), hide_index=True)
     
-    # --- PDF GENERATION (STANDARDISED FOR ALL SPRING TYPES) ---
+    # --- PDF GENERATION ---
     def generate_pdf():
         pdf = FPDF()
         pdf.add_page()
@@ -502,24 +511,16 @@ if raw_rate > 0:
         pdf.ln(5); pdf.set_font("Arial", 'B', 12); pdf.cell(200, 10, "2. Setup Guide", ln=True)
         pdf.set_font("Arial", size=10); pdf.cell(200, 8, f"Spring Type: {spring_type_sel}", ln=True)
         
-        # Branch-specific Hardware Details
         if "Sprindex" in spring_type_sel:
-            pdf_family = "XC/Trail (55mm)" if stroke_mm <= 55 else "Enduro (65mm)" if stroke_mm <= 65 else "DH (75mm)"
-            pdf.cell(200, 8, f"Hardware Family: {pdf_family}", ln=True)
-            pdf.cell(200, 8, f"Recommended Range: {active_range} lbs", ln=True)
+            pdf.cell(200, 8, f"Chosen Hardware: {chosen_range} lbs", ln=True)
         elif "Progressive Spring" in spring_type_sel:
-            # Safely fetch the closest model identified in results
             pdf.cell(200, 8, f"Recommended Model: {closest_prog['model']}", ln=True)
-            pdf.cell(200, 8, f"Ramp-up: +{closest_prog['prog']}%", ln=True)
         else:
-            # Fallback for standard springs
-            pdf_size = next((s for s in [55, 60, 65, 75] if s >= stroke_mm), 75)
-            pdf_size_display = pdf_size if unit_len == "Millimetres (mm)" else pdf_size * MM_TO_IN
+            pdf_size_display = required_stroke_mm if unit_len == "Millimetres (mm)" else required_stroke_mm * MM_TO_IN
             pdf.cell(200, 8, f"Required Size: {pdf_size_display:.2f} {u_len_label} Stroke", ln=True)
         
         pdf.ln(5); pdf.set_font("Arial", 'B', 12); pdf.cell(200, 10, "3. Rate Mapping / Options", ln=True)
         
-        # Standardise and print the mapping table
         try:
             if "Sprindex" in spring_type_sel:
                 target_list, rate_key, char_key = range_data, "Dial Index (lbs)", "Character"
@@ -537,10 +538,9 @@ if raw_rate > 0:
             pdf.cell(200, 8, "Mapping data unavailable.", ln=True)
         
         pdf.ln(10); pdf.set_font("Arial", 'I', 9)
-        pdf.multi_cell(0, 5, "Engineering Disclaimer: Actual requirements may deviate due to damper valving, friction, and dynamic riding loads. Physical verification via sag measurement is mandatory. Check Spring ID (35mm/38mm).")
+        pdf.multi_cell(0, 5, "Engineering Disclaimer: Actual requirements may deviate due to damper valving, friction, and dynamic riding loads. Physical verification via sag measurement is mandatory.")
         return pdf.output(dest="S").encode("latin-1")
     
-    # Download Button with error prevention
     try:
         pdf_bytes = generate_pdf()
         st.download_button(
@@ -559,7 +559,7 @@ flat_log = {
     "Timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     "Chassis": chassis_type,
     "Bike_Model": bike_model_log,
-    "Frame_Size": f_size, # Guaranteed by UI logic above
+    "Frame_Size": f_size, 
     "Rider_Weight_Kg": round(rider_kg, 1),
     "Bike_Weight_Kg": round(bike_kg, 1),
     "Sprung_Mass_Kg": round(total_system_kg - unsprung_kg, 1),
@@ -567,8 +567,8 @@ flat_log = {
     "Target_Sag_Pct": target_sag,
     "Calculated_Spring_Rate": int(raw_rate),
     "Kinematics_Source": "Verified DB" if selected_bike_data is not None else "User Contributed",
-    "Bike_Weight_Source": bike_weight_source, # Guaranteed by if/else block
-    "Unsprung_Mass_Source": unsprung_source,   # Guaranteed by if/else block
+    "Bike_Weight_Source": bike_weight_source,
+    "Unsprung_Mass_Source": unsprung_source,
     "Bias_Setting": f"{final_bias_calc}%",
     "Travel_mm": round(travel_mm, 1),
     "Stroke_mm": round(stroke_mm, 1),
