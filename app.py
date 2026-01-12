@@ -90,9 +90,7 @@ def load_bike_database():
         st.error(f"Error loading database: {e}")
         return pd.DataFrame()
         with col_search:
-    # Line 93: Indent 4 spaces
     if not bike_db.empty:
-        # Line 94+: Indent 8 spaces
         selected_model = st.selectbox(
             "Select Bike Model", 
             list(bike_db['Model'].unique()), 
@@ -108,7 +106,7 @@ def load_bike_database():
     else:
         # Provide feedback if the database failed to load
         st.warning("Database unavailable. Please use 'Add my bike' or manual inputs.")
-
+        
 def analyze_spring_compatibility(progression_pct, has_hbo):
     analysis = {"Linear": {"status": "", "msg": ""}, "Progressive": {"status": "", "msg": ""}}
     if progression_pct > 25:
