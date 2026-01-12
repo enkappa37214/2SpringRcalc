@@ -300,15 +300,17 @@ else:
     raw_travel, raw_stroke, raw_prog, raw_lr_start = 165.0, 62.5, float(defaults["progression"]), float(defaults["lr_start"])
 
 with col_k1:
-    travel_in = st.number_input(f"Rear Travel ({u_len_label})", 0.0, 300.0, float(raw_travel if unit_len == "Millimetres (mm)" else raw_travel * MM_TO_IN), 1.0, format="%d")
+    # Cast to integer and set format to %d to remove decimals and avoid type mismatch warnings
+    travel_val = int(raw_travel if unit_len == "Millimetres (mm)" else raw_travel * MM_TO_IN)
+    travel_in = st.number_input(f"Rear Travel ({u_len_label})", 0, 300, travel_val, 1, format="%d")
     
     if unit_len == "Inches (\")":
-        stroke_in = st.number_input(f"Shock Stroke ({u_len_label})", 1.5, 5.0, raw_stroke * MM_TO_IN, 0.1, disabled=is_db_bike, format="%0.2f")
+        stroke_in = st.number_input(f"Shock Stroke ({u_len_label})", 1.5, 5.0, float(raw_stroke * MM_TO_IN), 0.1, disabled=is_db_bike, format="%0.2f")
         stroke_mm = stroke_in * IN_TO_MM
     else:
         stroke_mm = st.selectbox(f"Shock Stroke ({u_len_label})", COMMON_STROKES, index=COMMON_STROKES.index(62.5), disabled=is_db_bike)
     
-    travel_mm = travel_in * IN_TO_MM if unit_len == "Inches (\")" else travel_in
+    travel_mm = travel_in * IN_TO_MM if unit_len == "Inches (\")" else float(travel_in)
 
 calc_lr_start = travel_mm / stroke_mm if stroke_mm > 0 else 0
 
@@ -324,8 +326,8 @@ with col_k2:
         """)
         prog_pct = float(defaults["progression"])
     else:
-        lr_start = st.number_input("LR Start Rate", 1.5, 4.0, raw_lr_start, 0.05, format="%0.2f")
-        prog_pct = st.number_input("Progression (%)", -10.0, 60.0, raw_prog, 1.0, format="%0.1f")
+        lr_start = st.number_input("LR Start Rate", 1.5, 4.0, float(raw_lr_start), 0.05, format="%0.2f")
+        prog_pct = st.number_input("Progression (%)", -10.0, 60.0, float(raw_prog), 1.0, format="%0.1f")
         calc_lr_start = lr_start
 
 # --- SPRING SELECTION ---
