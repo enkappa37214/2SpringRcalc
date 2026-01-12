@@ -202,6 +202,7 @@ with col_toggle:
     manual_entry_mode = st.checkbox("Add my bike")
 
 with col_search:
+    # This block must be indented 4 spaces relative to 'with'
     if not bike_db.empty:
         selected_model = st.selectbox(
             "Select Bike Model", 
@@ -216,6 +217,7 @@ with col_search:
             is_db_bike = True
             bike_model_log = selected_model
     else:
+        # Displayed if load_bike_database() fails
         st.warning("Database unavailable. Manual entry required.")
 
 if manual_entry_mode:
