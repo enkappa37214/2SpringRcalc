@@ -259,7 +259,7 @@ with col_inputs:
         u_display_val = unsprung_kg if unit_mass != "North America (lbs)" else unsprung_kg * KG_TO_LB
         st.info(f"**Estimated Unsprung Mass:** {u_display_val:.2f} {u_mass_label}")
     else:
-        unsprung_input = st.number_input(f"Unsprung ({u_mass_label})", 0.0, 25.0, 4.27 + (2.0 if is_ebike else 0.0), 0.1, format="%0.2f")
+        unsprung_input = st.number_input(f"Unsprung ({u_mass_label})", 0.0, 25.0, 4.27 + (2.0 if is_ebike else 0.0), 0.01, format="%0.2f")
         unsprung_kg = float(unsprung_input * LB_TO_KG if unit_mass == "North America (lbs)" else unsprung_input)
         unsprung_source = "Manual"
 
