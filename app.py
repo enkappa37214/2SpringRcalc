@@ -75,7 +75,9 @@ def load_bike_database():
     
     # Attempt 1: Standard Load
     try:
-        df = pd.read_csv(file_path)
+        # FIX APPLIED: Added sep=';' and decimal=',' to match your database format
+        df = pd.read_csv(file_path, sep=';', decimal=',')
+        
         # Check if load was messy (e.g. 1 column instead of many)
         if len(df.columns) < 2: 
             raise ValueError("Malformed CSV")
@@ -84,7 +86,8 @@ def load_bike_database():
         try:
             with open(file_path, "r") as f:
                 lines = [line.strip().strip('"') for line in f]
-            df = pd.read_csv(io.StringIO("\n".join(lines)))
+            # FIX APPLIED: Added sep=';' and decimal=',' here as well
+            df = pd.read_csv(io.StringIO("\n".join(lines)), sep=';', decimal=',')
         except Exception:
             return pd.DataFrame()
 
@@ -97,7 +100,6 @@ def load_bike_database():
         return df.fillna(0).sort_values('Model')
     
     return pd.DataFrame()
-
 def analyze_spring_compatibility(progression_pct, has_hbo):
     analysis = {"Linear": {"status": "", "msg": ""}, "Progressive": {"status": "", "msg": ""}}
     if progression_pct > 25:
