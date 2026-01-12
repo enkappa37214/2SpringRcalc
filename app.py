@@ -327,7 +327,7 @@ with col_k2:
         prog_pct = float(defaults["progression"])
     else:
         lr_start = st.number_input("LR Start Rate", 1.5, 4.0, float(raw_lr_start), 0.05, format="%0.2f")
-        prog_pct = st.number_input("Progression (%)", -10.0, 60.0, float(raw_prog), 1.0, format="%0.1f")
+        prog_pct = st.number_input("Progression (%)", -10.0, 60.0, float(raw_prog), 0.1, format="%0.1f")
         calc_lr_start = lr_start
 
 # --- SPRING SELECTION ---
