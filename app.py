@@ -70,13 +70,42 @@ PROGRESSIVE_SPRING_DATA = [
 @st.cache_data
 def load_bike_database():
     try:
+        # Load the CSV
         df = pd.read_csv("clean_suspension_database.csv")
+        
+        # Sanitise column names by stripping hidden whitespace
+        df.columns = df.columns.str.strip()
+        
+        # Ensure required numeric columns are converted correctly
         cols = ['Travel_mm', 'Shock_Stroke', 'Start_Leverage', 'End_Leverage', 'Progression_Pct']
         for c in cols:
-            df[c] = pd.to_numeric(df[c], errors='coerce')
+            if c in df.columns:
+                df[c] = pd.to_numeric(df[c], errors='coerce')
+        
         return df.sort_values('Model')
-    except Exception:
+    except FileNotFoundError:
+        st.error("Database file 'clean_suspension_database.csv' not found.")
         return pd.DataFrame()
+    except Exception as e:
+        st.error(f"Error loading database: {e}")
+        return pd.DataFrame()
+        with col_search:
+    if not bike_db.empty:
+        selected_model = st.selectbox(
+            "Select Bike Model", 
+            list(bike_db['Model'].unique()), 
+            index=None, 
+            placeholder="Type to search...", 
+            key='bike_selector', 
+            on_change=update_category_from_bike
+        )
+        if selected_model:
+            selected_bike_data = bike_db[bike_db['Model'] == selected_model].iloc[0]
+            is_db_bike = True
+            bike_model_log = selected_model
+    else:
+        # Provide feedback if the database failed to load
+        st.warning("Database unavailable. Please use 'Add my bike' or manual inputs.")
 
 def analyze_spring_compatibility(progression_pct, has_hbo):
     analysis = {"Linear": {"status": "", "msg": ""}, "Progressive": {"status": "", "msg": ""}}
