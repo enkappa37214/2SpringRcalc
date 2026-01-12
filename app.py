@@ -46,7 +46,6 @@ CATEGORY_DATA = {
 
 SKILL_MODIFIERS = {"Just starting": {"bias": +4}, "Beginner": {"bias": +2}, "Intermediate": {"bias": 0}, "Advanced": {"bias": -1}, "Racer": {"bias": -2}}
 SKILL_LEVELS = list(SKILL_MODIFIERS.keys())
-# MODIFIED: Removed Enduro (Race focus)
 COUPLING_COEFFS = {"Downcountry": 0.80, "Trail": 0.75, "All-Mountain": 0.70, "Enduro": 0.72, "Long Travel Enduro": 0.90, "Downhill (DH)": 0.95}
 
 SPRINDEX_DATA = {
@@ -70,18 +69,12 @@ PROGRESSIVE_SPRING_DATA = [
 @st.cache_data
 def load_bike_database():
     try:
-        # Load the CSV
         df = pd.read_csv("clean_suspension_database.csv")
-        
-        # Sanitise column names by stripping hidden whitespace
         df.columns = df.columns.str.strip()
-        
-        # Ensure required numeric columns are converted correctly
         cols = ['Travel_mm', 'Shock_Stroke', 'Start_Leverage', 'End_Leverage', 'Progression_Pct']
         for c in cols:
             if c in df.columns:
                 df[c] = pd.to_numeric(df[c], errors='coerce')
-        
         return df.sort_values('Model')
     except FileNotFoundError:
         st.error("Database file 'clean_suspension_database.csv' not found.")
@@ -89,24 +82,7 @@ def load_bike_database():
     except Exception as e:
         st.error(f"Error loading database: {e}")
         return pd.DataFrame()
-        with col_search:
-    if not bike_db.empty:
-        selected_model = st.selectbox(
-            "Select Bike Model", 
-            list(bike_db['Model'].unique()), 
-            index=None, 
-            placeholder="Type to search...", 
-            key='bike_selector', 
-            on_change=update_category_from_bike
-        )
-        if selected_model:
-            selected_bike_data = bike_db[bike_db['Model'] == selected_model].iloc[0]
-            is_db_bike = True
-            bike_model_log = selected_model
-    else:
-        # Provide feedback if the database failed to load
-        st.warning("Database unavailable. Please use 'Add my bike' or manual inputs.")
-        
+
 def analyze_spring_compatibility(progression_pct, has_hbo):
     analysis = {"Linear": {"status": "", "msg": ""}, "Progressive": {"status": "", "msg": ""}}
     if progression_pct > 25:
@@ -138,7 +114,6 @@ def update_category_from_bike():
         elif t < 155: cat_name = cat_keys[2]
         elif t < 170: cat_name = cat_keys[3]
         elif t < 185: cat_name = cat_keys[4]
-        # MODIFIED: Changed index from 6 to 5 to account for removed category
         else: cat_name = cat_keys[5]
         st.session_state.category_select = cat_name
         st.session_state.rear_bias_slider = CATEGORY_DATA[cat_name]["bias"]
@@ -202,7 +177,6 @@ with col_toggle:
     manual_entry_mode = st.checkbox("Add my bike")
 
 with col_search:
-    # This block must be indented 4 spaces relative to 'with'
     if not bike_db.empty:
         selected_model = st.selectbox(
             "Select Bike Model", 
@@ -217,7 +191,6 @@ with col_search:
             is_db_bike = True
             bike_model_log = selected_model
     else:
-        # Displayed if load_bike_database() fails
         st.warning("Database unavailable. Manual entry required.")
 
 if manual_entry_mode:
@@ -316,7 +289,6 @@ with col_summary:
     with res_sub1: st.metric("Front Load", f"{front_display:.1f} {u_mass_label}")
     with res_sub2: st.metric("Rear Load", f"{rear_display:.1f} {u_mass_label}")
 
-        
 # --- KINEMATICS ---
 st.header("3. Shock & Kinematics")
 col_k1, col_k2 = st.columns(2)
@@ -329,7 +301,6 @@ else:
 with col_k1:
     travel_in = st.number_input(f"Rear Travel ({u_len_label})", 0.0, 300.0, float(raw_travel if unit_len == "Millimetres (mm)" else raw_travel * MM_TO_IN), 1.0)
     
-    # Shock stroke selectbox with 62.5mm default
     if unit_len == "Inches (\")":
         stroke_in = st.number_input(f"Shock Stroke ({u_len_label})", 1.5, 5.0, raw_stroke * MM_TO_IN, 0.1, disabled=is_db_bike)
         stroke_mm = stroke_in * IN_TO_MM
@@ -343,7 +314,6 @@ calc_lr_start = travel_mm / stroke_mm if stroke_mm > 0 else 0
 with col_k2:
     adv_kinematics = st.checkbox("Advanced Kinematics", value=is_db_bike)
     
-    # Conditional summary for basic mode
     if not adv_kinematics:
         st.container()
         st.markdown(f"""
@@ -381,7 +351,6 @@ total_drop = calc_lr_start * (prog_pct / 100)
 effective_lr = calc_lr_start - (total_drop * (target_sag / 100)) if adv_kinematics else travel_mm / stroke_mm
 eff_rider_kg = rider_kg + (gear_kg * COUPLING_COEFFS[category])
 
-# Calculation fix for rear load
 rear_load_lbs = max(0, (sprung_mass_kg * (final_bias_calc / 100))) * KG_TO_LB
 raw_rate = (rear_load_lbs * effective_lr) / (stroke_mm * (target_sag / 100) * MM_TO_IN) if stroke_mm > 0 else 0
 if spring_type_sel == "Progressive Spring": raw_rate *= PROGRESSIVE_CORRECTION_FACTOR
@@ -402,7 +371,6 @@ if raw_rate > 0:
     current_rate = int(round(raw_rate / 25) * 25)
     active_range = ""
 
-    # --- BRANCH 1: SPRINDEX LOGIC ---
     if "Sprindex" in spring_type_sel:
         family = "XC/Trail (55mm)" if stroke_mm <= 55 else "Enduro (65mm)" if stroke_mm <= 65 else "DH (75mm)"
         ranges = SPRINDEX_DATA[family]["ranges"]
@@ -435,22 +403,16 @@ if raw_rate > 0:
         st.table(pd.DataFrame(range_data))
         current_rate = high_bound
 
-    # --- BRANCH 2: PROGRESSIVE SPRING LOGIC ---
     elif "Progressive Spring" in spring_type_sel:
         st.subheader("Progressive Spring Recommendation")
         st.info("Progressive springs are rated by their initial (start) rate. Final sag is determined by the initial rate.")
         
-        # Identify closest progressive hardware based on start rate
-        # We look for the start rate closest to our calculated sag rate
         closest_prog = min(PROGRESSIVE_SPRING_DATA, key=lambda x: abs(x["start"] - raw_rate))
         
         prog_table = []
         for p_model in PROGRESSIVE_SPRING_DATA:
-            # Resulting sag is a function of the start rate
             p_sag_pct = ((rear_load_lbs * effective_lr / p_model["start"]) / (stroke_mm * MM_TO_IN)) * 100
             diff = p_sag_pct - target_sag
-            
-            # Label based on proximity to target
             status = "Target Match" if p_model == closest_prog else "Alternative"
             feel = "Plush" if p_model["start"] < closest_prog["start"] else "Firm" if p_model["start"] > closest_prog["start"] else "Balanced"
             
@@ -467,7 +429,6 @@ if raw_rate > 0:
         st.warning("Warning: Progressive springs increase end-stroke support but may require less damping (HSC) to avoid harshness.")
         current_rate = closest_prog["start"]
 
-    # --- BRANCH 3: STANDARD LINEAR LOGIC ---
     else:
         standard_spring_strokes = [55, 60, 65, 75]
         required_stroke_mm = next((s for s in standard_spring_strokes if s >= stroke_mm), 75)
@@ -482,7 +443,6 @@ if raw_rate > 0:
             alt_rates.append({"Rate (lbs)": f"{r} lbs", "Resulting Sag": f"{r_sag_pct:.1f}%", "Feel": "Plush" if r < center_rate else "Supportive" if r > center_rate else "Target"})
         st.table(alt_rates)
 
-    # Unified Preload Table (Calculated from current_rate)
     st.subheader(f"Fine Tuning (Preload - {current_rate} lbs spring)")
     preload_results = []
     for turns in [1.0, 1.5, 2.0, 2.5, 3.0]:
@@ -491,7 +451,6 @@ if raw_rate > 0:
         preload_results.append({"Turns": turns, "Sag (%)": f"{max(0, sag_pct):.1f}%", "Status": "OK" if 1.0 <= turns <= 2.0 else "Caution"})
     st.dataframe(pd.DataFrame(preload_results), hide_index=True)
     
-    # --- PDF GENERATION (STANDARDISED FOR ALL SPRING TYPES) ---
     def generate_pdf():
         pdf = FPDF()
         pdf.add_page()
@@ -509,24 +468,20 @@ if raw_rate > 0:
         pdf.ln(5); pdf.set_font("Arial", 'B', 12); pdf.cell(200, 10, "2. Setup Guide", ln=True)
         pdf.set_font("Arial", size=10); pdf.cell(200, 8, f"Spring Type: {spring_type_sel}", ln=True)
         
-        # Branch-specific Hardware Details
         if "Sprindex" in spring_type_sel:
             pdf_family = "XC/Trail (55mm)" if stroke_mm <= 55 else "Enduro (65mm)" if stroke_mm <= 65 else "DH (75mm)"
             pdf.cell(200, 8, f"Hardware Family: {pdf_family}", ln=True)
             pdf.cell(200, 8, f"Recommended Range: {active_range} lbs", ln=True)
         elif "Progressive Spring" in spring_type_sel:
-            # Safely fetch the closest model identified in results
             pdf.cell(200, 8, f"Recommended Model: {closest_prog['model']}", ln=True)
             pdf.cell(200, 8, f"Ramp-up: +{closest_prog['prog']}%", ln=True)
         else:
-            # Fallback for standard springs
             pdf_size = next((s for s in [55, 60, 65, 75] if s >= stroke_mm), 75)
             pdf_size_display = pdf_size if unit_len == "Millimetres (mm)" else pdf_size * MM_TO_IN
             pdf.cell(200, 8, f"Required Size: {pdf_size_display:.2f} {u_len_label} Stroke", ln=True)
         
         pdf.ln(5); pdf.set_font("Arial", 'B', 12); pdf.cell(200, 10, "3. Rate Mapping / Options", ln=True)
         
-        # Standardise and print the mapping table
         try:
             if "Sprindex" in spring_type_sel:
                 target_list, rate_key, char_key = range_data, "Dial Index (lbs)", "Character"
@@ -547,7 +502,6 @@ if raw_rate > 0:
         pdf.multi_cell(0, 5, "Engineering Disclaimer: Actual requirements may deviate due to damper valving, friction, and dynamic riding loads. Physical verification via sag measurement is mandatory.")
         return pdf.output(dest="S").encode("latin-1")
     
-    # Download Button with error prevention
     try:
         pdf_bytes = generate_pdf()
         st.download_button(
@@ -566,7 +520,7 @@ flat_log = {
     "Timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     "Chassis": chassis_type,
     "Bike_Model": bike_model_log,
-    "Frame_Size": f_size, # Guaranteed by UI logic above
+    "Frame_Size": f_size,
     "Rider_Weight_Kg": round(rider_kg, 1),
     "Bike_Weight_Kg": round(bike_kg, 1),
     "Sprung_Mass_Kg": round(total_system_kg - unsprung_kg, 1),
@@ -574,8 +528,8 @@ flat_log = {
     "Target_Sag_Pct": target_sag,
     "Calculated_Spring_Rate": int(raw_rate),
     "Kinematics_Source": "Verified DB" if selected_bike_data is not None else "User Contributed",
-    "Bike_Weight_Source": bike_weight_source, # Guaranteed by if/else block
-    "Unsprung_Mass_Source": unsprung_source,   # Guaranteed by if/else block
+    "Bike_Weight_Source": bike_weight_source,
+    "Unsprung_Mass_Source": unsprung_source,
     "Bias_Setting": f"{final_bias_calc}%",
     "Travel_mm": round(travel_mm, 1),
     "Stroke_mm": round(stroke_mm, 1),
