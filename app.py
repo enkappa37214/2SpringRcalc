@@ -232,7 +232,7 @@ with col_inputs:
         st.info(f"**Estimated Bike Weight:** {bike_display_val:.1f} {u_mass_label}")
     else:
         f_size = st.selectbox("Frame Size", size_options, index=3, key="shared_f_size") 
-        bike_input = st.number_input(f"Bike Weight ({u_mass_label})", 7.0, 45.0, float(defaults["bike_mass_def_kg"]) + (EBIKE_WEIGHT_PENALTY_KG if is_ebike else 0.0), format="%0.1f")
+        bike_input = st.number_input(f"Bike Weight ({u_mass_label})", 7.0, 45.0, float(defaults["bike_mass_def_kg"]) + (EBIKE_WEIGHT_PENALTY_KG if is_ebike else 0.0), 0.1, format="%0.1f")
         bike_kg = float(bike_input * LB_TO_KG if unit_mass == "North America (lbs)" else bike_input)
         bike_weight_source = "Manual"
         
