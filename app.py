@@ -70,45 +70,34 @@ PROGRESSIVE_SPRING_DATA = [
 @st.cache_data
 def load_bike_database():
     file_path = "clean_suspension_database.csv"
-    
-    # Attempt 1: Standard Load with Semicolon Delimiter and Comma Decimal
     try:
-        # Fix: added sep=';' and decimal=',' to handle European CSV format correctly
-        df = pd.read_csv(file_path, sep=';', decimal=',')
+        # Load with semicolon separator and read as strings to handle decimal formatting
+        df = pd.read_csv(file_path, sep=';', dtype=str)
         
-        # Check if load was messy (e.g. 1 column instead of many)
-        if len(df.columns) < 2: 
-            raise ValueError("Malformed CSV")
-            
+        # Clean numeric columns: replace ',' with '.' and convert to float
+        numeric_cols = ['Travel_mm', 'Shock_Stroke', 'Start_Leverage', 'End_Leverage', 'Progression_Pct']
+        for c in numeric_cols:
+            if c in df.columns:
+                df[c] = df[c].str.replace(',', '.', regex=False)
+                df[c] = pd.to_numeric(df[c], errors='coerce')
+        
+        # Drop rows where critical data is invalid/NaN to prevent 0.0 values crashing the UI
+        # This ensures raw_lr_start is always a valid number >= 1.5
+        df = df.dropna(subset=['Start_Leverage', 'Model'])
+        
+        return df.fillna(0).sort_values('Model')
+        
     except Exception:
-        # Attempt 2: Fallback for malformed quoting
-        try:
-            with open(file_path, "r") as f:
-                lines = [line.strip().strip('"') for line in f]
-            # Fix: added sep=';' and decimal=',' here too
-            df = pd.read_csv(io.StringIO("\n".join(lines)), sep=';', decimal=',')
-        except Exception:
-            return pd.DataFrame()
-
+        return pd.DataFrame()
     # Final Validation & Typing
     if not df.empty and 'Model' in df.columns:
         numeric_cols = ['Travel_mm', 'Shock_Stroke', 'Start_Leverage', 'End_Leverage', 'Progression_Pct']
         for c in numeric_cols:
             if c in df.columns:
-                # Force conversion to numeric (floats), coercion handles errors
                 df[c] = pd.to_numeric(df[c], errors='coerce')
-        
-        # Remove rows with critical missing/invalid data to prevent UI crashes
-        df = df.dropna(subset=['Model', 'Travel_mm', 'Shock_Stroke', 'Start_Leverage'])
-        
-        # Ensure Start_Leverage is within valid range for the UI slider (>= 1.5)
-        if 'Start_Leverage' in df.columns:
-             df = df[df['Start_Leverage'] >= 1.5]
-
         return df.fillna(0).sort_values('Model')
     
     return pd.DataFrame()
-
 def analyze_spring_compatibility(progression_pct, has_hbo):
     analysis = {"Linear": {"status": "", "msg": ""}, "Progressive": {"status": "", "msg": ""}}
     if progression_pct > 25:
