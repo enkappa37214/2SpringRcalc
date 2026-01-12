@@ -70,27 +70,25 @@ PROGRESSIVE_SPRING_DATA = [
 @st.cache_data
 def load_bike_database():
     file_path = "clean_suspension_database.csv"
-    required_cols = ['Model', 'Travel_mm', 'Shock_Stroke']
-    df = pd.DataFrame()
-    
-    # Attempt 1: Standard Load
     try:
-        # FIX APPLIED: Added sep=';' and decimal=',' to match your database format
-        df = pd.read_csv(file_path, sep=';', decimal=',')
+        # Load with semicolon separator and read as strings to handle decimal formatting
+        df = pd.read_csv(file_path, sep=';', dtype=str)
         
-        # Check if load was messy (e.g. 1 column instead of many)
-        if len(df.columns) < 2: 
-            raise ValueError("Malformed CSV")
+        # Clean numeric columns: replace ',' with '.' and convert to float
+        numeric_cols = ['Travel_mm', 'Shock_Stroke', 'Start_Leverage', 'End_Leverage', 'Progression_Pct']
+        for c in numeric_cols:
+            if c in df.columns:
+                df[c] = df[c].str.replace(',', '.', regex=False)
+                df[c] = pd.to_numeric(df[c], errors='coerce')
+        
+        # Drop rows where critical data is invalid/NaN to prevent 0.0 values crashing the UI
+        # This ensures raw_lr_start is always a valid number >= 1.5
+        df = df.dropna(subset=['Start_Leverage', 'Model'])
+        
+        return df.fillna(0).sort_values('Model')
+        
     except Exception:
-        # Attempt 2: Fix Malformed Quoting (Excel artifact)
-        try:
-            with open(file_path, "r") as f:
-                lines = [line.strip().strip('"') for line in f]
-            # FIX APPLIED: Added sep=';' and decimal=',' here as well
-            df = pd.read_csv(io.StringIO("\n".join(lines)), sep=';', decimal=',')
-        except Exception:
-            return pd.DataFrame()
-
+        return pd.DataFrame()
     # Final Validation & Typing
     if not df.empty and 'Model' in df.columns:
         numeric_cols = ['Travel_mm', 'Shock_Stroke', 'Start_Leverage', 'End_Leverage', 'Progression_Pct']
