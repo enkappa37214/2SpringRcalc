@@ -146,16 +146,17 @@ col_r1, col_r2 = st.columns(2)
 with col_r1: skill = st.selectbox("Rider Skill", SKILL_LEVELS, index=2)
 with col_r2:
     if unit_mass == "UK Hybrid (st & kg)":
-        stone, lbs_rem = st.number_input("Rider Weight (st)", 5.0, 20.0, 11.0, 0.5), st.number_input("Rider Weight (+lbs)", 0.0, 13.9, 0.0, 1.0)
+        stone = st.number_input("Rider Weight (st)", 5.0, 20.0, 11.0, 0.5, format="%0.1f")
+        lbs_rem = st.number_input("Rider Weight (+lbs)", 0.0, 13.9, 0.0, 1.0, format="%0.1f")
         rider_kg = (stone * STONE_TO_KG) + (lbs_rem * LB_TO_KG)
     elif unit_mass == "North America (lbs)":
-        rider_in = st.number_input("Rider Weight (lbs)", 90.0, 280.0, 160.0, 1.0)
+        rider_in = st.number_input("Rider Weight (lbs)", 90.0, 280.0, 160.0, 1.0, format="%0.1f")
         rider_kg = rider_in * LB_TO_KG
     else:
-        rider_kg = st.number_input("Rider Weight (kg)", 40.0, 130.0, 68.0, 0.5)
+        rider_kg = st.number_input("Rider Weight (kg)", 40.0, 130.0, 68.0, 0.5, format="%0.1f")
     
     gear_def = 5.0 if unit_mass == "North America (lbs)" else 4.0
-    gear_input = st.number_input(f"Gear Weight ({u_mass_label})", 0.0, 25.0, float(gear_def), 0.5)
+    gear_input = st.number_input(f"Gear Weight ({u_mass_label})", 0.0, 25.0, float(gear_def), 0.5, format="%0.1f")
     gear_kg = gear_input * LB_TO_KG if unit_mass == "North America (lbs)" else gear_input
 
 # --- CHASSIS DATA ---
@@ -231,7 +232,7 @@ with col_inputs:
         st.info(f"**Estimated Bike Weight:** {bike_display_val:.1f} {u_mass_label}")
     else:
         f_size = st.selectbox("Frame Size", size_options, index=3, key="shared_f_size") 
-        bike_input = st.number_input(f"Bike Weight ({u_mass_label})", 7.0, 45.0, float(defaults["bike_mass_def_kg"]) + (EBIKE_WEIGHT_PENALTY_KG if is_ebike else 0.0))
+        bike_input = st.number_input(f"Bike Weight ({u_mass_label})", 7.0, 45.0, float(defaults["bike_mass_def_kg"]) + (EBIKE_WEIGHT_PENALTY_KG if is_ebike else 0.0), format="%0.1f")
         bike_kg = float(bike_input * LB_TO_KG if unit_mass == "North America (lbs)" else bike_input)
         bike_weight_source = "Manual"
         
@@ -258,7 +259,7 @@ with col_inputs:
         u_display_val = unsprung_kg if unit_mass != "North America (lbs)" else unsprung_kg * KG_TO_LB
         st.info(f"**Estimated Unsprung Mass:** {u_display_val:.2f} {u_mass_label}")
     else:
-        unsprung_input = st.number_input(f"Unsprung ({u_mass_label})", 0.0, 25.0, 4.27 + (2.0 if is_ebike else 0.0), 0.1)
+        unsprung_input = st.number_input(f"Unsprung ({u_mass_label})", 0.0, 25.0, 4.27 + (2.0 if is_ebike else 0.0), 0.1, format="%0.2f")
         unsprung_kg = float(unsprung_input * LB_TO_KG if unit_mass == "North America (lbs)" else unsprung_input)
         unsprung_source = "Manual"
 
@@ -299,10 +300,10 @@ else:
     raw_travel, raw_stroke, raw_prog, raw_lr_start = 165.0, 62.5, float(defaults["progression"]), float(defaults["lr_start"])
 
 with col_k1:
-    travel_in = st.number_input(f"Rear Travel ({u_len_label})", 0.0, 300.0, float(raw_travel if unit_len == "Millimetres (mm)" else raw_travel * MM_TO_IN), 1.0)
+    travel_in = st.number_input(f"Rear Travel ({u_len_label})", 0.0, 300.0, float(raw_travel if unit_len == "Millimetres (mm)" else raw_travel * MM_TO_IN), 1.0, format="%d")
     
     if unit_len == "Inches (\")":
-        stroke_in = st.number_input(f"Shock Stroke ({u_len_label})", 1.5, 5.0, raw_stroke * MM_TO_IN, 0.1, disabled=is_db_bike)
+        stroke_in = st.number_input(f"Shock Stroke ({u_len_label})", 1.5, 5.0, raw_stroke * MM_TO_IN, 0.1, disabled=is_db_bike, format="%0.2f")
         stroke_mm = stroke_in * IN_TO_MM
     else:
         stroke_mm = st.selectbox(f"Shock Stroke ({u_len_label})", COMMON_STROKES, index=COMMON_STROKES.index(62.5), disabled=is_db_bike)
@@ -323,8 +324,8 @@ with col_k2:
         """)
         prog_pct = float(defaults["progression"])
     else:
-        lr_start = st.number_input("LR Start Rate", 1.5, 4.0, raw_lr_start, 0.05)
-        prog_pct = st.number_input("Progression (%)", -10.0, 60.0, raw_prog, 1.0)
+        lr_start = st.number_input("LR Start Rate", 1.5, 4.0, raw_lr_start, 0.05, format="%0.2f")
+        prog_pct = st.number_input("Progression (%)", -10.0, 60.0, raw_prog, 1.0, format="%0.1f")
         calc_lr_start = lr_start
 
 # --- SPRING SELECTION ---
