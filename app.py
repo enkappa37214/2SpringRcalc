@@ -90,7 +90,9 @@ def load_bike_database():
         st.error(f"Error loading database: {e}")
         return pd.DataFrame()
         with col_search:
+    # Line 93: Indent 4 spaces
     if not bike_db.empty:
+        # Line 94+: Indent 8 spaces
         selected_model = st.selectbox(
             "Select Bike Model", 
             list(bike_db['Model'].unique()), 
