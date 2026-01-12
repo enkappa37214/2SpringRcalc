@@ -212,7 +212,11 @@ with col_search:
             on_change=update_category_from_bike
         )
         if selected_model:
-            selected_bike_data, is_db_bike, bike_model_log = bike_db[bike_db['Model'] == selected_model].iloc[0], True, selected_model
+            selected_bike_data = bike_db[bike_db['Model'] == selected_model].iloc[0]
+            is_db_bike = True
+            bike_model_log = selected_model
+    else:
+        st.warning("Database unavailable. Manual entry required.")
 
 if manual_entry_mode:
     st.info("Community Contribution: Global database enrichment.")
